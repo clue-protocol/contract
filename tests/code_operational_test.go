@@ -1,8 +1,3 @@
-// Package tests holds the Go tests for the ClueCode bindings in out/go/code.
-//
-// Every test except TestDeploy uses the global config (CLUE_* env vars) and runs against an
-// already deployed contract. TestDeploy has its own DEPLOY_* parameters and deploys a fresh
-// contract. See tests/.env.example.
 package tests
 
 import (
@@ -34,21 +29,6 @@ import (
 // ======================================================================
 // Global configuration (all tests except TestDeploy)
 // ======================================================================
-// Global test configuration.
-//
-// Every test except TestDeploy uses this shared config. It points at an
-// already deployed ClueCode contract and is read from the environment:
-//
-//	CLUE_RPC_URL             JSON-RPC endpoint                      (required; tests skip when unset)
-//	CLUE_CHAIN_ID            chain id; checked against the endpoint (optional, derived when unset)
-//	CLUE_PRIVATE_KEY         default signer, hex                    (required for state-changing tests)
-//	CLUE_CONTRACT_ADDRESS    deployed ClueCode address              (required)
-//	CLUE_MINTER_PRIVATE_KEY  key holding MINTER_ROLE                (optional, defaults to CLUE_PRIVATE_KEY)
-//	CLUE_ADMIN_ADDRESS       expected default admin                 (optional, enables an extra check)
-//	CLUE_TX_TIMEOUT          seconds to wait for a transaction      (optional, default 120)
-//
-// State-changing tests (mint, transfer) skip themselves when the signer is not a minter.
-// Config is the global configuration shared by all tests except TestDeploy.
 type Config struct {
 	RPCURL    string
 	ChainID   *big.Int
@@ -78,11 +58,9 @@ func TestMain(m *testing.M) {
 	os.Exit(rc)
 }
 
-// loadConfig returns (nil, nil) when CLUE_RPC_URL is not set, so the suite skips cleanly.
 func loadConfig() (*Config, error) {
 	env, err := envt.Map(&envt.Config{
-		EnvPath:  "tests/.env",
-		PanicErr: true,
+		EnvPath: "tests/.env",
 	})
 	if err != nil {
 		return nil, err
@@ -93,7 +71,6 @@ func loadConfig() (*Config, error) {
 		return nil, nil
 	}
 	c := &Config{RPCURL: rpc, TxTimeout: 120 * time.Second}
-
 	if s := env["CLUE_CHAIN_ID"]; s != "" {
 		id, ok := new(big.Int).SetString(s, 10)
 		if !ok {
@@ -101,13 +78,11 @@ func loadConfig() (*Config, error) {
 		}
 		c.ChainID = id
 	}
-
 	addr := env["CLUE_CONTRACT_ADDRESS"]
 	if !common.IsHexAddress(addr) {
 		return nil, fmt.Errorf("CLUE_CONTRACT_ADDRESS %q is not a valid address", addr)
 	}
 	c.Contract = common.HexToAddress(addr)
-
 	if s := env["CLUE_PRIVATE_KEY"]; s != "" {
 		k, err := parseKey(s)
 		if err != nil {
@@ -116,7 +91,6 @@ func loadConfig() (*Config, error) {
 		c.Key = k
 		c.MinterKey = k
 	}
-
 	if s := env["CLUE_MINTER_PRIVATE_KEY"]; s != "" {
 		k, err := parseKey(s)
 		if err != nil {
@@ -124,7 +98,6 @@ func loadConfig() (*Config, error) {
 		}
 		c.MinterKey = k
 	}
-
 	if s := env["CLUE_ADMIN_ADDRESS"]; s != "" {
 		if !common.IsHexAddress(s) {
 			return nil, fmt.Errorf("CLUE_ADMIN_ADDRESS %q is not a valid address", s)
@@ -132,7 +105,6 @@ func loadConfig() (*Config, error) {
 		a := common.HexToAddress(s)
 		c.Admin = &a
 	}
-
 	if s := env["CLUE_TX_TIMEOUT"]; s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil || n <= 0 {
@@ -140,7 +112,6 @@ func loadConfig() (*Config, error) {
 		}
 		c.TxTimeout = time.Duration(n) * time.Second
 	}
-
 	return c, nil
 }
 
@@ -148,7 +119,6 @@ func parseKey(s string) (*ecdsa.PrivateKey, error) {
 	return crypto.HexToECDSA(strings.TrimPrefix(strings.TrimSpace(s), "0x"))
 }
 
-// connect dials the RPC, verifies the chain id and that code exists at the address, and binds ClueCode.
 func connect() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -177,7 +147,6 @@ func connect() error {
 	return err
 }
 
-// requireConfig skips the test when the suite is not configured, and fails it when the config is broken.
 func requireConfig(t *testing.T) {
 	t.Helper()
 	if cfgErr != nil {
@@ -188,7 +157,6 @@ func requireConfig(t *testing.T) {
 	}
 }
 
-// requireSigner additionally needs CLUE_PRIVATE_KEY.
 func requireSigner(t *testing.T) {
 	t.Helper()
 	requireConfig(t)
@@ -197,7 +165,6 @@ func requireSigner(t *testing.T) {
 	}
 }
 
-// requireMinter additionally needs a signer that currently holds MINTER_ROLE.
 func requireMinter(t *testing.T) {
 	t.Helper()
 	requireSigner(t)
@@ -225,7 +192,6 @@ func txOpts(t *testing.T, k *ecdsa.PrivateKey) *bind.TransactOpts {
 	return auth
 }
 
-// mine waits for the transaction and fails unless it succeeded.
 func mine(t *testing.T, tx *types.Transaction, err error) *types.Receipt {
 	t.Helper()
 	if err != nil {
@@ -254,7 +220,6 @@ func randomAddress(t *testing.T) common.Address {
 
 func bigInt(n uint64) *big.Int { return new(big.Int).SetUint64(n) }
 
-// ---- revert assertions ----
 func revertData(err error) []byte {
 	var de interface{ ErrorData() interface{} }
 	if errors.As(err, &de) {
@@ -267,8 +232,6 @@ func revertData(err error) []byte {
 	return nil
 }
 
-// isRevert reports whether err is a revert with the named custom error from the ClueCode ABI.
-// When the node returns no revert data, any error is accepted.
 func isRevert(err error, name string) bool {
 	if err == nil {
 		return false
@@ -299,221 +262,8 @@ func requireRevert(t *testing.T, err error, name string) {
 }
 
 // ======================================================================
-// Deploy test (separate DEPLOY_* config)
-// ======================================================================
-// TestDeploy is deliberately separate from the global config above: it does not
-// use an existing contract address. It deploys a fresh ClueCode and takes its own parameters
-// from DEPLOY_* environment variables:
-//
-//	DEPLOY_RPC_URL        JSON-RPC endpoint            (required; the test skips when unset)
-//	DEPLOY_CHAIN_ID       chain id, checked vs the RPC (required)
-//	DEPLOY_PRIVATE_KEY    deployer key, hex            (required; must hold gas funds)
-//	DEPLOY_ADMIN          default admin, e.g. a multisig   (optional, default: deployer)
-//	DEPLOY_MINTER         genesis distributor              (optional, default: deployer)
-//	DEPLOY_ADMIN_DELAY    admin-change delay in seconds    (optional, default 86400)
-//	DEPLOY_OUT_FILE       write {chainId, address, ...} JSON here (optional)
-//	DEPLOY_TX_TIMEOUT     seconds to wait for the deploy tx (optional, default 180)
-//
-// Point CLUE_CONTRACT_ADDRESS at the printed address to run the rest of the suite against it.
-// DeployConfig holds the parameters of TestDeploy only.
-type DeployConfig struct {
-	RPCURL     string
-	ChainID    *big.Int
-	Key        *ecdsa.PrivateKey
-	Admin      common.Address
-	Minter     common.Address
-	AdminDelay *big.Int
-	OutFile    string
-	TxTimeout  time.Duration
-}
-
-// loadDeployConfig returns (nil, nil) when DEPLOY_RPC_URL is not set.
-func loadDeployConfig() (*DeployConfig, error) {
-	env, err := envt.Map(&envt.Config{
-		EnvPath:  "tests/.env",
-		PanicErr: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	rpc := env["DEPLOY_RPC_URL"]
-	if rpc == "" {
-		return nil, nil
-	}
-	c := &DeployConfig{
-		RPCURL:     rpc,
-		AdminDelay: big.NewInt(86400),
-		OutFile:    env["DEPLOY_OUT_FILE"],
-		TxTimeout:  180 * time.Second,
-	}
-
-	id, ok := new(big.Int).SetString(env["DEPLOY_CHAIN_ID"], 10)
-	if !ok {
-		return nil, fmt.Errorf("DEPLOY_CHAIN_ID is required and must be a decimal integer")
-	}
-	c.ChainID = id
-
-	if env["DEPLOY_PRIVATE_KEY"] == "" {
-		return nil, fmt.Errorf("DEPLOY_PRIVATE_KEY is required")
-	}
-	k, err := parseKey(env["DEPLOY_PRIVATE_KEY"])
-	if err != nil {
-		return nil, fmt.Errorf("DEPLOY_PRIVATE_KEY: %w", err)
-	}
-	c.Key = k
-
-	deployer := addrOf(k)
-	c.Admin, c.Minter = deployer, deployer
-
-	for envKey, dst := range map[string]*common.Address{
-		"DEPLOY_ADMIN":  &c.Admin,
-		"DEPLOY_MINTER": &c.Minter,
-	} {
-		if s := env[envKey]; s != "" {
-			if !common.IsHexAddress(s) {
-				return nil, fmt.Errorf("%s %q is not a valid address", envKey, s)
-			}
-			*dst = common.HexToAddress(s)
-		}
-	}
-
-	if c.Admin == (common.Address{}) {
-		return nil, fmt.Errorf("DEPLOY_ADMIN must not be the zero address")
-	}
-
-	if s := env["DEPLOY_ADMIN_DELAY"]; s != "" {
-		d, ok := new(big.Int).SetString(s, 10)
-		if !ok || d.Sign() < 0 || d.BitLen() > 48 {
-			return nil, fmt.Errorf("DEPLOY_ADMIN_DELAY %q must be an integer in [0, 2^48)", s)
-		}
-		c.AdminDelay = d
-	}
-
-	if s := env["DEPLOY_TX_TIMEOUT"]; s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil || n <= 0 {
-			return nil, fmt.Errorf("DEPLOY_TX_TIMEOUT %q must be a positive number of seconds", s)
-		}
-		c.TxTimeout = time.Duration(n) * time.Second
-	}
-
-	return c, nil
-}
-
-func TestDeploy(t *testing.T) {
-	dc, err := loadDeployConfig()
-	if err != nil {
-		t.Fatalf("deploy configuration error: %v", err)
-	}
-	if dc == nil {
-		t.Skip("DEPLOY_RPC_URL not set; see tests/.env.example")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), dc.TxTimeout)
-	defer cancel()
-	cl, err := ethclient.DialContext(ctx, dc.RPCURL)
-	if err != nil {
-		t.Fatalf("dial %s: %v", dc.RPCURL, err)
-	}
-	defer cl.Close()
-	remote, err := cl.ChainID(ctx)
-	if err != nil {
-		t.Fatalf("fetch chain id: %v", err)
-	}
-	if remote.Cmp(dc.ChainID) != 0 {
-		t.Fatalf("DEPLOY_CHAIN_ID=%s but the endpoint reports chain id %s", dc.ChainID, remote)
-	}
-	deployer := addrOf(dc.Key)
-	bal, err := cl.BalanceAt(ctx, deployer, nil)
-	if err != nil {
-		t.Fatalf("balance: %v", err)
-	}
-	if bal.Sign() == 0 {
-		t.Fatalf("deployer %s has no funds on chain %s", deployer, dc.ChainID)
-	}
-	t.Logf("deploying from %s on chain %s (admin %s, minter %s, delay %ss)",
-		deployer, dc.ChainID, dc.Admin, dc.Minter, dc.AdminDelay)
-	auth, err := bind.NewKeyedTransactorWithChainID(dc.Key, dc.ChainID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	auth.Context = ctx
-	address, tx, instance, err := cluecode.DeployClueCode(auth, cl, dc.Admin, dc.AdminDelay, dc.Minter)
-	if err != nil {
-		t.Fatalf("DeployClueCode: %v", err)
-	}
-	receipt, err := bind.WaitMined(ctx, cl, tx)
-	if err != nil {
-		t.Fatalf("wait for deployment %s: %v", tx.Hash(), err)
-	}
-	if receipt.Status != types.ReceiptStatusSuccessful {
-		t.Fatalf("deployment %s reverted", tx.Hash())
-	}
-	if receipt.ContractAddress != address {
-		t.Fatalf("receipt address %s != returned address %s", receipt.ContractAddress, address)
-	}
-	t.Logf("ClueCode deployed at %s (tx %s, block %s, gas %d)",
-		address, tx.Hash(), receipt.BlockNumber, receipt.GasUsed)
-	// --- verify the constructor arguments took effect ---
-	if name, err := instance.Name(nil); err != nil || name != "Clue Provider Code" {
-		t.Errorf("name = %q, err %v", name, err)
-	}
-	if sym, err := instance.Symbol(nil); err != nil || sym != "CPC" {
-		t.Errorf("symbol = %q, err %v", sym, err)
-	}
-	if supply, err := instance.MAXSUPPLY(nil); err != nil || supply.Cmp(big.NewInt(totalSupply)) != 0 {
-		t.Errorf("MAX_SUPPLY = %v, err %v", supply, err)
-	}
-	if n, err := instance.TotalMinted(nil); err != nil || n.Sign() != 0 {
-		t.Errorf("totalMinted = %v, err %v; want 0", n, err)
-	}
-	if a, err := instance.DefaultAdmin(nil); err != nil || a != dc.Admin {
-		t.Errorf("defaultAdmin = %s, err %v; want %s", a, err, dc.Admin)
-	}
-	if d, err := instance.DefaultAdminDelay(nil); err != nil || d.Cmp(dc.AdminDelay) != 0 {
-		t.Errorf("defaultAdminDelay = %v, err %v; want %s", d, err, dc.AdminDelay)
-	}
-	minterRole, err := instance.MINTERROLE(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ok, err := instance.HasRole(nil, minterRole, dc.Minter); err != nil || !ok {
-		t.Errorf("hasRole(MINTER_ROLE, %s) = %v, err %v; want true", dc.Minter, ok, err)
-	}
-	if ok, err := instance.HasRole(nil, [32]byte{}, dc.Admin); err != nil || !ok {
-		t.Errorf("hasRole(DEFAULT_ADMIN_ROLE, %s) = %v, err %v; want true", dc.Admin, ok, err)
-	}
-	if dc.Minter != dc.Admin {
-		if ok, err := instance.HasRole(nil, minterRole, dc.Admin); err != nil || ok {
-			t.Errorf("admin unexpectedly holds MINTER_ROLE (%v, err %v)", ok, err)
-		}
-	}
-	// Print the address in a form that can be pasted into the shell for the rest of the suite.
-	fmt.Printf("\nexport CLUE_RPC_URL=%s\nexport CLUE_CHAIN_ID=%s\nexport CLUE_CONTRACT_ADDRESS=%s\n\n",
-		dc.RPCURL, dc.ChainID, address)
-	if dc.OutFile != "" {
-		out, _ := json.MarshalIndent(map[string]interface{}{
-			"chainId":    dc.ChainID.String(),
-			"rpc":        dc.RPCURL,
-			"address":    address.Hex(),
-			"txHash":     tx.Hash().Hex(),
-			"block":      receipt.BlockNumber.String(),
-			"admin":      dc.Admin.Hex(),
-			"minter":     dc.Minter.Hex(),
-			"adminDelay": dc.AdminDelay.String(),
-		}, "", "  ")
-		if err := os.WriteFile(dc.OutFile, out, 0o644); err != nil {
-			t.Fatalf("write %s: %v", dc.OutFile, err)
-		}
-		t.Logf("wrote %s", dc.OutFile)
-	}
-}
-
-// ======================================================================
 // Reference implementation and Section 8 test vectors
 // ======================================================================
-// Reference implementation of the Provider Code rules, used to cross-check the on-chain
-// functions. Keep identical to the vectors in the ClueCode implementation note (Section 8).
 const (
 	gradeNone   uint8 = 0
 	gradeS      uint8 = 1
@@ -566,7 +316,6 @@ var validVectors = []validVector{
 	{99999, gradeB, "99999"},
 }
 
-// 0, the four-digit gap and anything above 99999 are never valid.
 var invalidVectors = []uint64{0, 1000, 1001, 5000, 9998, 9999, 100000, 100001, 1 << 40}
 
 // ======================================================================
@@ -671,9 +420,6 @@ func TestCanonicalInvalidReverts(t *testing.T) {
 	}
 }
 
-// TestParitySweep compares the contract with the Go reference over the full Grade S and A
-// ranges, the boundaries of the invalid gap, and a stride through Grade B.
-// Skipped with -short because it makes one RPC call per code.
 func TestParitySweep(t *testing.T) {
 	requireConfig(t)
 	if testing.Short() {
@@ -742,7 +488,6 @@ func TestDefaultAdmin(t *testing.T) {
 	if cfg.Admin != nil && got != *cfg.Admin {
 		t.Fatalf("defaultAdmin = %s, want %s", got, *cfg.Admin)
 	}
-	// After the admin renounces (genesis lock-down) defaultAdmin is the zero address.
 	if got == (common.Address{}) {
 		t.Log("default admin renounced: role management is permanently frozen")
 		return
@@ -784,7 +529,6 @@ func TestSupportsInterface(t *testing.T) {
 	}
 }
 
-// callAs performs an eth_call of a ClueCode method from an arbitrary (unfunded) sender.
 func callAs(t *testing.T, from common.Address, method string, args ...interface{}) error {
 	t.Helper()
 	parsed, err := cluecode.ClueCodeMetaData.GetAbi()
@@ -801,8 +545,6 @@ func callAs(t *testing.T, from common.Address, method string, args ...interface{
 	return err
 }
 
-// Anyone without MINTER_ROLE must be rejected. Uses eth_call from a random address,
-// so it needs no funds and changes no state.
 func TestMintRequiresMinterRole(t *testing.T) {
 	requireConfig(t)
 	stranger := randomAddress(t)
@@ -823,7 +565,6 @@ func TestGrantRoleRequiresAdmin(t *testing.T) {
 func TestDefaultAdminRulesEnforced(t *testing.T) {
 	requireConfig(t)
 	stranger := randomAddress(t)
-	// With AccessControlDefaultAdminRules the admin role can never be granted or revoked directly.
 	requireRevert(t, callAs(t, stranger, "grantRole", [32]byte{}, stranger), "AccessControlEnforcedDefaultAdminRules")
 	requireRevert(t, callAs(t, stranger, "revokeRole", [32]byte{}, stranger), "AccessControlEnforcedDefaultAdminRules")
 	requireRevert(t, callAs(t, stranger, "beginDefaultAdminTransfer", stranger), "AccessControlUnauthorizedAccount")
@@ -831,10 +572,9 @@ func TestDefaultAdminRulesEnforced(t *testing.T) {
 
 func TestTokenURIUnmintedReverts(t *testing.T) {
 	requireConfig(t)
-	// Valid code, but pick one very unlikely to be minted on a fresh genesis-in-progress chain.
 	for _, c := range []uint64{99999, 99998, 99997, 99996, 99995} {
 		if _, err := cc.OwnerOf(nil, bigInt(c)); err == nil {
-			continue // minted: try the next one
+			continue
 		}
 		_, err := cc.TokenURI(nil, bigInt(c))
 		requireRevert(t, err, "ERC721NonexistentToken")
@@ -846,17 +586,13 @@ func TestTokenURIUnmintedReverts(t *testing.T) {
 // ======================================================================
 // State-changing: mint, batch, transfer
 // ======================================================================
-// State-changing tests. They need CLUE_PRIVATE_KEY (and, if different, CLUE_MINTER_PRIVATE_KEY)
-// to hold MINTER_ROLE and enough gas funds, and skip themselves otherwise. They mint a few
-// codes from the top of the Grade B range (99999 downwards), skipping any already minted.
-// freeCodes returns n valid, currently unminted codes, searching downward from 99999.
 func freeCodes(t *testing.T, n int) []uint64 {
 	t.Helper()
 	var out []uint64
 	for c := uint64(99999); c >= 10000 && len(out) < n; c-- {
 		_, err := cc.OwnerOf(nil, bigInt(c))
 		if err == nil {
-			continue // already minted
+			continue
 		}
 		if !isRevert(err, "ERC721NonexistentToken") {
 			t.Fatalf("ownerOf(%d): unexpected error: %v", c, err)
@@ -902,7 +638,6 @@ func TestMintTransferAndMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// --- mint ---
 	tx, err := cc.Mint(minterAuth, owner, id)
 	mine(t, tx, err)
 	got, err := cc.OwnerOf(nil, id)
@@ -913,7 +648,6 @@ func TestMintTransferAndMetadata(t *testing.T) {
 	if err != nil || new(big.Int).Sub(after, before).Int64() != 1 {
 		t.Fatalf("totalMinted %v -> %v, want +1 (err %v)", before, after, err)
 	}
-	// --- tokenURI: on-chain JSON + SVG ---
 	uri, err := cc.TokenURI(nil, id)
 	if err != nil {
 		t.Fatal(err)
@@ -933,21 +667,18 @@ func TestMintTransferAndMetadata(t *testing.T) {
 	if !strings.Contains(svg, ">"+canon+"</text>") || !strings.Contains(svg, "Grade B</text>") {
 		t.Errorf("svg does not show code %s / Grade B: %s", canon, svg)
 	}
-	// --- rejected mints ---
 	_, err = cc.Mint(minterAuth, owner, id)
-	requireRevert(t, err, "ERC721InvalidSender") // duplicate
+	requireRevert(t, err, "ERC721InvalidSender")
 	_, err = cc.Mint(minterAuth, owner, big.NewInt(1000))
-	requireRevert(t, err, "InvalidProviderCode") // four-digit gap
+	requireRevert(t, err, "InvalidProviderCode")
 	_, err = cc.Mint(minterAuth, owner, big.NewInt(0))
 	requireRevert(t, err, "InvalidProviderCode")
 	_, err = cc.Mint(minterAuth, common.Address{}, bigInt(code-1))
 	requireRevert(t, err, "ERC721InvalidReceiver")
-	// --- a role holder cannot move someone else's token ---
 	if addrOf(cfg.MinterKey) != owner {
 		_, err = cc.TransferFrom(minterAuth, owner, addrOf(cfg.MinterKey), id)
 		requireRevert(t, err, "ERC721InsufficientApproval")
 	}
-	// --- approve, then transfer (approval is cleared) ---
 	ownerAuth := txOpts(t, cfg.Key)
 	operator := randomAddress(t)
 	tx, err = cc.Approve(ownerAuth, operator, id)
@@ -974,14 +705,12 @@ func TestMintBatch(t *testing.T) {
 	owner := addrOf(cfg.Key)
 	auth := txOpts(t, cfg.MinterKey)
 	codes := freeCodes(t, 3)
-	// A batch containing an invalid code is all-or-nothing: nothing is minted.
 	bad := []*big.Int{bigInt(codes[0]), bigInt(codes[1]), big.NewInt(1000)}
 	_, err := cc.MintBatch(auth, owner, bad)
 	requireRevert(t, err, "InvalidProviderCode")
 	if _, err := cc.OwnerOf(nil, bigInt(codes[0])); !isRevert(err, "ERC721NonexistentToken") {
 		t.Fatalf("code %d was minted by a failed batch (err %v)", codes[0], err)
 	}
-	// A valid batch mints every code and advances totalMinted by the batch size.
 	before, err := cc.TotalMinted(nil)
 	if err != nil {
 		t.Fatal(err)
