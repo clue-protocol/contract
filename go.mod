@@ -1,8 +1,11 @@
-module github.com/clue-protocol/contracts
+module github.com/clue-protocol/contract
 
 go 1.25.6
 
-require github.com/ethereum/go-ethereum v1.17.10
+require (
+	github.com/ethereum/go-ethereum v1.17.10
+	github.com/pat3icki/pkgt v0.0.0-20261108082604-3cdba2de281d
+)
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
