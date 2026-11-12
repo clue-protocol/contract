@@ -47,6 +47,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
+
 	cfg, cfgErr = loadConfig()
 	if cfg != nil && cfgErr == nil {
 		cfgErr = connect()
