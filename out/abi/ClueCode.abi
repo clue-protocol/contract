@@ -15,6 +15,11 @@
         "internalType": "address",
         "name": "minter",
         "type": "address"
+      },
+      {
+        "internalType": "string",
+        "name": "initialURI",
+        "type": "string"
       }
     ],
     "stateMutability": "nonpayable",
@@ -66,6 +71,17 @@
       }
     ],
     "name": "AccessControlUnauthorizedAccount",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      }
+    ],
+    "name": "CodeMetadataIsFrozen",
     "type": "error"
   },
   {
@@ -183,6 +199,16 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "LengthMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MetadataIsFrozen",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint8",
@@ -250,6 +276,32 @@
   },
   {
     "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "newBaseURI",
+        "type": "string"
+      }
+    ],
+    "name": "BaseURIUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      }
+    ],
+    "name": "CodeMetadataFrozen",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
     "inputs": [],
     "name": "DefaultAdminDelayChangeCanceled",
     "type": "event"
@@ -296,6 +348,38 @@
       }
     ],
     "name": "DefaultAdminTransferScheduled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "MetadataFrozen",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      }
+    ],
+    "name": "MetadataSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "MetadataUpdate",
     "type": "event"
   },
   {
@@ -426,6 +510,19 @@
   },
   {
     "inputs": [],
+    "name": "METADATA_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MINTER_ROLE",
     "outputs": [
       {
@@ -476,6 +573,19 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "baseURI",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
       }
     ],
     "stateMutability": "view",
@@ -534,6 +644,38 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      }
+    ],
+    "name": "clearMetadata",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "codeFrozen",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "defaultAdmin",
     "outputs": [
@@ -570,6 +712,26 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      }
+    ],
+    "name": "freezeCode",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "freezeMetadata",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -650,6 +812,25 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      }
+    ],
+    "name": "hasMetadata",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32",
         "name": "role",
         "type": "bytes32"
@@ -717,6 +898,96 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      }
+    ],
+    "name": "metadata",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "metadataFrozen",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      }
+    ],
+    "name": "metadataOf",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "image",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "externalUrl",
+            "type": "string"
+          },
+          {
+            "components": [
+              {
+                "internalType": "string",
+                "name": "traitType",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "value",
+                "type": "string"
+              }
+            ],
+            "internalType": "struct ClueCode.Trait[]",
+            "name": "traits",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct ClueCode.CodeMetadata",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "to",
         "type": "address"
@@ -746,6 +1017,68 @@
       }
     ],
     "name": "mintBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "image",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "externalUrl",
+            "type": "string"
+          },
+          {
+            "components": [
+              {
+                "internalType": "string",
+                "name": "traitType",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "value",
+                "type": "string"
+              }
+            ],
+            "internalType": "struct ClueCode.Trait[]",
+            "name": "traits",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct ClueCode.CodeMetadata",
+        "name": "md",
+        "type": "tuple"
+      }
+    ],
+    "name": "mintWithMetadata",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -939,6 +1272,133 @@
       }
     ],
     "name": "setApprovalForAll",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "newBaseURI",
+        "type": "string"
+      }
+    ],
+    "name": "setBaseURI",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "code",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "image",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "externalUrl",
+            "type": "string"
+          },
+          {
+            "components": [
+              {
+                "internalType": "string",
+                "name": "traitType",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "value",
+                "type": "string"
+              }
+            ],
+            "internalType": "struct ClueCode.Trait[]",
+            "name": "traits",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct ClueCode.CodeMetadata",
+        "name": "md",
+        "type": "tuple"
+      }
+    ],
+    "name": "setMetadata",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "codes",
+        "type": "uint256[]"
+      },
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "image",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "externalUrl",
+            "type": "string"
+          },
+          {
+            "components": [
+              {
+                "internalType": "string",
+                "name": "traitType",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "value",
+                "type": "string"
+              }
+            ],
+            "internalType": "struct ClueCode.Trait[]",
+            "name": "traits",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct ClueCode.CodeMetadata[]",
+        "name": "mds",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "setMetadataBatch",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

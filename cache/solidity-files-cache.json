@@ -1,9 +1,9 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/src/code/ClueCode.sol": {
-      "lastModificationDate": 1794016513625,
-      "contentHash": "c9fd05847a2ac178ad02c0927137cec2",
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/src/code/ClueCode.sol": {
+      "lastModificationDate": 1794512812600,
+      "contentHash": "19b43531e8d2fd28e3258a2f2c4d983b",
       "sourceName": "src/code/ClueCode.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -42,8 +42,8 @@
         "ClueCode"
       ]
     },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/utils/Strings.sol": {
-      "lastModificationDate": 1794082597723,
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/utils/Strings.sol": {
+      "lastModificationDate": 1794504352535,
       "contentHash": "ba57ff4ddf1d9cae9d2009792795b7f6",
       "sourceName": "@openzeppelin/contracts/utils/Strings.sol",
       "solcConfig": {
@@ -81,8 +81,86 @@
         "Strings"
       ]
     },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/token/ERC721/ERC721.sol": {
-      "lastModificationDate": 1794082597384,
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol": {
+      "lastModificationDate": 1794504351701,
+      "contentHash": "d765bf467430909a9687b336bb946d78",
+      "sourceName": "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./IAccessControlDefaultAdminRules.sol",
+        "../AccessControl.sol",
+        "../../utils/math/SafeCast.sol",
+        "../../utils/math/Math.sol",
+        "../../interfaces/IERC5313.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "AccessControlDefaultAdminRules"
+      ]
+    },
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/utils/Base64.sol": {
+      "lastModificationDate": 1794504351750,
+      "contentHash": "89b9633fa53a8d960ba4763727f27421",
+      "sourceName": "@openzeppelin/contracts/utils/Base64.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "Base64"
+      ]
+    },
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/token/ERC721/ERC721.sol": {
+      "lastModificationDate": 1794504352126,
       "contentHash": "1e64e2ad597dc5b2dae11346502baad4",
       "sourceName": "@openzeppelin/contracts/token/ERC721/ERC721.sol",
       "solcConfig": {
@@ -125,86 +203,8 @@
         "ERC721"
       ]
     },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/utils/Base64.sol": {
-      "lastModificationDate": 1794082597154,
-      "contentHash": "89b9633fa53a8d960ba4763727f27421",
-      "sourceName": "@openzeppelin/contracts/utils/Base64.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "Base64"
-      ]
-    },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol": {
-      "lastModificationDate": 1794082597124,
-      "contentHash": "d765bf467430909a9687b336bb946d78",
-      "sourceName": "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "./IAccessControlDefaultAdminRules.sol",
-        "../AccessControl.sol",
-        "../../utils/math/SafeCast.sol",
-        "../../utils/math/Math.sol",
-        "../../interfaces/IERC5313.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "AccessControlDefaultAdminRules"
-      ]
-    },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/utils/math/Math.sol": {
-      "lastModificationDate": 1794082597673,
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/utils/math/Math.sol": {
+      "lastModificationDate": 1794504352474,
       "contentHash": "718fa8ba0ff269c92e364c1429d9de57",
       "sourceName": "@openzeppelin/contracts/utils/math/Math.sol",
       "solcConfig": {
@@ -239,8 +239,8 @@
         "Math"
       ]
     },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/utils/math/SignedMath.sol": {
-      "lastModificationDate": 1794082597720,
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/utils/math/SignedMath.sol": {
+      "lastModificationDate": 1794504352533,
       "contentHash": "b6c6bdc7aaca4fe5b680760a72e09d3e",
       "sourceName": "@openzeppelin/contracts/utils/math/SignedMath.sol",
       "solcConfig": {
@@ -275,268 +275,8 @@
         "SignedMath"
       ]
     },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/utils/Context.sol": {
-      "lastModificationDate": 1794082597170,
-      "contentHash": "67bfbc07588eb8683b3fd8f6f909563e",
-      "sourceName": "@openzeppelin/contracts/utils/Context.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "Context"
-      ]
-    },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol": {
-      "lastModificationDate": 1794082597188,
-      "contentHash": "4aefc698f77ecbace7f401257dfe182d",
-      "sourceName": "@openzeppelin/contracts/interfaces/draft-IERC6093.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "IERC1155Errors",
-        "IERC20Errors",
-        "IERC721Errors"
-      ]
-    },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/token/ERC721/IERC721.sol": {
-      "lastModificationDate": 1794082597631,
-      "contentHash": "5df8fdb527e563085847cad29e3c5f2e",
-      "sourceName": "@openzeppelin/contracts/token/ERC721/IERC721.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "../../utils/introspection/IERC165.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "IERC721"
-      ]
-    },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol": {
-      "lastModificationDate": 1794082597653,
-      "contentHash": "fc8a9841f4bdd6329c26a00d5e75f4b3",
-      "sourceName": "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "IERC721Receiver"
-      ]
-    },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/utils/introspection/ERC165.sol": {
-      "lastModificationDate": 1794082597260,
-      "contentHash": "6a55c353946e471d9792965d06208295",
-      "sourceName": "@openzeppelin/contracts/utils/introspection/ERC165.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "./IERC165.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "ERC165"
-      ]
-    },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol": {
-      "lastModificationDate": 1794082597648,
-      "contentHash": "12c206f185cb951213799561fdcaa40d",
-      "sourceName": "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "../IERC721.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "IERC721Metadata"
-      ]
-    },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/utils/introspection/IERC165.sol": {
-      "lastModificationDate": 1794082597565,
-      "contentHash": "de0163561b417b800d01749cbbe2147e",
-      "sourceName": "@openzeppelin/contracts/utils/introspection/IERC165.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "paris",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "IERC165"
-      ]
-    },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/access/AccessControl.sol": {
-      "lastModificationDate": 1794082597117,
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/access/AccessControl.sol": {
+      "lastModificationDate": 1794504351692,
       "contentHash": "4c80b7fdf559a9a348e832a57d072a0b",
       "sourceName": "@openzeppelin/contracts/access/AccessControl.sol",
       "solcConfig": {
@@ -575,8 +315,8 @@
         "AccessControl"
       ]
     },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/interfaces/IERC5313.sol": {
-      "lastModificationDate": 1794082597619,
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/interfaces/IERC5313.sol": {
+      "lastModificationDate": 1794504352426,
       "contentHash": "102f441e8bc28c4fc48b349151273d01",
       "sourceName": "@openzeppelin/contracts/interfaces/IERC5313.sol",
       "solcConfig": {
@@ -611,8 +351,8 @@
         "IERC5313"
       ]
     },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol": {
-      "lastModificationDate": 1794082597499,
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol": {
+      "lastModificationDate": 1794504352309,
       "contentHash": "a99615d9875393acb1c5f5385d663d39",
       "sourceName": "@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol",
       "solcConfig": {
@@ -649,8 +389,8 @@
         "IAccessControlDefaultAdminRules"
       ]
     },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol": {
-      "lastModificationDate": 1794082597710,
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol": {
+      "lastModificationDate": 1794504352510,
       "contentHash": "d72cdfaacd4b1b8e090b57f4b7200ddc",
       "sourceName": "@openzeppelin/contracts/utils/math/SafeCast.sol",
       "solcConfig": {
@@ -685,8 +425,44 @@
         "SafeCast"
       ]
     },
-    "/home/innocentp/go/src/github.com/clue-protocol/contracts/node_modules/@openzeppelin/contracts/access/IAccessControl.sol": {
-      "lastModificationDate": 1794082597496,
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/utils/Context.sol": {
+      "lastModificationDate": 1794504351777,
+      "contentHash": "67bfbc07588eb8683b3fd8f6f909563e",
+      "sourceName": "@openzeppelin/contracts/utils/Context.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "Context"
+      ]
+    },
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/access/IAccessControl.sol": {
+      "lastModificationDate": 1794504352306,
       "contentHash": "e3a14b0714caaaa82d58fa0bc3756079",
       "sourceName": "@openzeppelin/contracts/access/IAccessControl.sol",
       "solcConfig": {
@@ -719,6 +495,230 @@
       ],
       "artifacts": [
         "IAccessControl"
+      ]
+    },
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/utils/introspection/ERC165.sol": {
+      "lastModificationDate": 1794504351929,
+      "contentHash": "6a55c353946e471d9792965d06208295",
+      "sourceName": "@openzeppelin/contracts/utils/introspection/ERC165.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./IERC165.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ERC165"
+      ]
+    },
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/utils/introspection/IERC165.sol": {
+      "lastModificationDate": 1794504352377,
+      "contentHash": "de0163561b417b800d01749cbbe2147e",
+      "sourceName": "@openzeppelin/contracts/utils/introspection/IERC165.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IERC165"
+      ]
+    },
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol": {
+      "lastModificationDate": 1794504351799,
+      "contentHash": "4aefc698f77ecbace7f401257dfe182d",
+      "sourceName": "@openzeppelin/contracts/interfaces/draft-IERC6093.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IERC1155Errors",
+        "IERC20Errors",
+        "IERC721Errors"
+      ]
+    },
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/token/ERC721/IERC721.sol": {
+      "lastModificationDate": 1794504352437,
+      "contentHash": "5df8fdb527e563085847cad29e3c5f2e",
+      "sourceName": "@openzeppelin/contracts/token/ERC721/IERC721.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../../utils/introspection/IERC165.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IERC721"
+      ]
+    },
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol": {
+      "lastModificationDate": 1794504352454,
+      "contentHash": "fc8a9841f4bdd6329c26a00d5e75f4b3",
+      "sourceName": "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IERC721Receiver"
+      ]
+    },
+    "/home/innocentp/go/src/github.com/clue-protocol/contract/node_modules/@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol": {
+      "lastModificationDate": 1794504352450,
+      "contentHash": "12c206f185cb951213799561fdcaa40d",
+      "sourceName": "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../IERC721.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IERC721Metadata"
       ]
     }
   }

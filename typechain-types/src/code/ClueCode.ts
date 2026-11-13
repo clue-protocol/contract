@@ -23,31 +23,73 @@ import type {
   TypedContractMethod,
 } from "../../common";
 
+export declare namespace ClueCode {
+  export type TraitStruct = { traitType: string; value: string };
+
+  export type TraitStructOutput = [traitType: string, value: string] & {
+    traitType: string;
+    value: string;
+  };
+
+  export type CodeMetadataStruct = {
+    name: string;
+    description: string;
+    image: string;
+    externalUrl: string;
+    traits: ClueCode.TraitStruct[];
+  };
+
+  export type CodeMetadataStructOutput = [
+    name: string,
+    description: string,
+    image: string,
+    externalUrl: string,
+    traits: ClueCode.TraitStructOutput[]
+  ] & {
+    name: string;
+    description: string;
+    image: string;
+    externalUrl: string;
+    traits: ClueCode.TraitStructOutput[];
+  };
+}
+
 export interface ClueCodeInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "DEFAULT_ADMIN_ROLE"
       | "MAX_SUPPLY"
+      | "METADATA_ROLE"
       | "MINTER_ROLE"
       | "acceptDefaultAdminTransfer"
       | "approve"
       | "balanceOf"
+      | "baseURI"
       | "beginDefaultAdminTransfer"
       | "cancelDefaultAdminTransfer"
       | "canonical"
       | "changeDefaultAdminDelay"
+      | "clearMetadata"
+      | "codeFrozen"
       | "defaultAdmin"
       | "defaultAdminDelay"
       | "defaultAdminDelayIncreaseWait"
+      | "freezeCode"
+      | "freezeMetadata"
       | "getApproved"
       | "getRoleAdmin"
       | "gradeOf"
       | "grantRole"
+      | "hasMetadata"
       | "hasRole"
       | "isApprovedForAll"
       | "isValidCode"
+      | "metadata"
+      | "metadataFrozen"
+      | "metadataOf"
       | "mint"
       | "mintBatch"
+      | "mintWithMetadata"
       | "name"
       | "owner"
       | "ownerOf"
@@ -59,6 +101,9 @@ export interface ClueCodeInterface extends Interface {
       | "safeTransferFrom(address,address,uint256)"
       | "safeTransferFrom(address,address,uint256,bytes)"
       | "setApprovalForAll"
+      | "setBaseURI"
+      | "setMetadata"
+      | "setMetadataBatch"
       | "supportsInterface"
       | "symbol"
       | "tokenURI"
@@ -70,10 +115,15 @@ export interface ClueCodeInterface extends Interface {
     nameOrSignatureOrTopic:
       | "Approval"
       | "ApprovalForAll"
+      | "BaseURIUpdated"
+      | "CodeMetadataFrozen"
       | "DefaultAdminDelayChangeCanceled"
       | "DefaultAdminDelayChangeScheduled"
       | "DefaultAdminTransferCanceled"
       | "DefaultAdminTransferScheduled"
+      | "MetadataFrozen"
+      | "MetadataSet"
+      | "MetadataUpdate"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
@@ -86,6 +136,10 @@ export interface ClueCodeInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "MAX_SUPPLY",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "METADATA_ROLE",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -104,6 +158,7 @@ export interface ClueCodeInterface extends Interface {
     functionFragment: "balanceOf",
     values: [AddressLike]
   ): string;
+  encodeFunctionData(functionFragment: "baseURI", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "beginDefaultAdminTransfer",
     values: [AddressLike]
@@ -121,6 +176,14 @@ export interface ClueCodeInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "clearMetadata",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "codeFrozen",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "defaultAdmin",
     values?: undefined
   ): string;
@@ -130,6 +193,14 @@ export interface ClueCodeInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "defaultAdminDelayIncreaseWait",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "freezeCode",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "freezeMetadata",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -149,6 +220,10 @@ export interface ClueCodeInterface extends Interface {
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "hasMetadata",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "hasRole",
     values: [BytesLike, AddressLike]
   ): string;
@@ -161,12 +236,28 @@ export interface ClueCodeInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "metadata",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "metadataFrozen",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "metadataOf",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "mint",
     values: [AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "mintBatch",
     values: [AddressLike, BigNumberish[]]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "mintWithMetadata",
+    values: [AddressLike, BigNumberish, ClueCode.CodeMetadataStruct]
   ): string;
   encodeFunctionData(functionFragment: "name", values?: undefined): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
@@ -206,6 +297,15 @@ export interface ClueCodeInterface extends Interface {
     functionFragment: "setApprovalForAll",
     values: [AddressLike, boolean]
   ): string;
+  encodeFunctionData(functionFragment: "setBaseURI", values: [string]): string;
+  encodeFunctionData(
+    functionFragment: "setMetadata",
+    values: [BigNumberish, ClueCode.CodeMetadataStruct]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setMetadataBatch",
+    values: [BigNumberish[], ClueCode.CodeMetadataStruct[]]
+  ): string;
   encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
@@ -230,6 +330,10 @@ export interface ClueCodeInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "MAX_SUPPLY", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "METADATA_ROLE",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "MINTER_ROLE",
     data: BytesLike
   ): Result;
@@ -239,6 +343,7 @@ export interface ClueCodeInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "approve", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "balanceOf", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "baseURI", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "beginDefaultAdminTransfer",
     data: BytesLike
@@ -253,6 +358,11 @@ export interface ClueCodeInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "clearMetadata",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "codeFrozen", data: BytesLike): Result;
+  decodeFunctionResult(
     functionFragment: "defaultAdmin",
     data: BytesLike
   ): Result;
@@ -262,6 +372,11 @@ export interface ClueCodeInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "defaultAdminDelayIncreaseWait",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "freezeCode", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "freezeMetadata",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -274,6 +389,10 @@ export interface ClueCodeInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "gradeOf", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "grantRole", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "hasMetadata",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "isApprovedForAll",
@@ -283,8 +402,18 @@ export interface ClueCodeInterface extends Interface {
     functionFragment: "isValidCode",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "metadata", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "metadataFrozen",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "metadataOf", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "mint", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "mintBatch", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "mintWithMetadata",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "name", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "ownerOf", data: BytesLike): Result;
@@ -315,6 +444,15 @@ export interface ClueCodeInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "setApprovalForAll",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "setBaseURI", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "setMetadata",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "setMetadataBatch",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -373,6 +511,30 @@ export namespace ApprovalForAllEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace BaseURIUpdatedEvent {
+  export type InputTuple = [newBaseURI: string];
+  export type OutputTuple = [newBaseURI: string];
+  export interface OutputObject {
+    newBaseURI: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace CodeMetadataFrozenEvent {
+  export type InputTuple = [code: BigNumberish];
+  export type OutputTuple = [code: bigint];
+  export interface OutputObject {
+    code: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace DefaultAdminDelayChangeCanceledEvent {
   export type InputTuple = [];
   export type OutputTuple = [];
@@ -418,6 +580,40 @@ export namespace DefaultAdminTransferScheduledEvent {
   export interface OutputObject {
     newAdmin: string;
     acceptSchedule: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace MetadataFrozenEvent {
+  export type InputTuple = [];
+  export type OutputTuple = [];
+  export interface OutputObject {}
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace MetadataSetEvent {
+  export type InputTuple = [code: BigNumberish];
+  export type OutputTuple = [code: bigint];
+  export interface OutputObject {
+    code: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace MetadataUpdateEvent {
+  export type InputTuple = [_tokenId: BigNumberish];
+  export type OutputTuple = [_tokenId: bigint];
+  export interface OutputObject {
+    _tokenId: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -548,6 +744,8 @@ export interface ClueCode extends BaseContract {
 
   MAX_SUPPLY: TypedContractMethod<[], [bigint], "view">;
 
+  METADATA_ROLE: TypedContractMethod<[], [string], "view">;
+
   MINTER_ROLE: TypedContractMethod<[], [string], "view">;
 
   acceptDefaultAdminTransfer: TypedContractMethod<[], [void], "nonpayable">;
@@ -559,6 +757,8 @@ export interface ClueCode extends BaseContract {
   >;
 
   balanceOf: TypedContractMethod<[owner: AddressLike], [bigint], "view">;
+
+  baseURI: TypedContractMethod<[], [string], "view">;
 
   beginDefaultAdminTransfer: TypedContractMethod<
     [newAdmin: AddressLike],
@@ -576,11 +776,23 @@ export interface ClueCode extends BaseContract {
     "nonpayable"
   >;
 
+  clearMetadata: TypedContractMethod<
+    [code: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  codeFrozen: TypedContractMethod<[arg0: BigNumberish], [boolean], "view">;
+
   defaultAdmin: TypedContractMethod<[], [string], "view">;
 
   defaultAdminDelay: TypedContractMethod<[], [bigint], "view">;
 
   defaultAdminDelayIncreaseWait: TypedContractMethod<[], [bigint], "view">;
+
+  freezeCode: TypedContractMethod<[code: BigNumberish], [void], "nonpayable">;
+
+  freezeMetadata: TypedContractMethod<[], [void], "nonpayable">;
 
   getApproved: TypedContractMethod<[tokenId: BigNumberish], [string], "view">;
 
@@ -593,6 +805,8 @@ export interface ClueCode extends BaseContract {
     [void],
     "nonpayable"
   >;
+
+  hasMetadata: TypedContractMethod<[code: BigNumberish], [boolean], "view">;
 
   hasRole: TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -608,6 +822,16 @@ export interface ClueCode extends BaseContract {
 
   isValidCode: TypedContractMethod<[code: BigNumberish], [boolean], "view">;
 
+  metadata: TypedContractMethod<[code: BigNumberish], [string], "view">;
+
+  metadataFrozen: TypedContractMethod<[], [boolean], "view">;
+
+  metadataOf: TypedContractMethod<
+    [code: BigNumberish],
+    [ClueCode.CodeMetadataStructOutput],
+    "view"
+  >;
+
   mint: TypedContractMethod<
     [to: AddressLike, code: BigNumberish],
     [void],
@@ -616,6 +840,12 @@ export interface ClueCode extends BaseContract {
 
   mintBatch: TypedContractMethod<
     [to: AddressLike, codes: BigNumberish[]],
+    [void],
+    "nonpayable"
+  >;
+
+  mintWithMetadata: TypedContractMethod<
+    [to: AddressLike, code: BigNumberish, md: ClueCode.CodeMetadataStruct],
     [void],
     "nonpayable"
   >;
@@ -675,6 +905,20 @@ export interface ClueCode extends BaseContract {
     "nonpayable"
   >;
 
+  setBaseURI: TypedContractMethod<[newBaseURI: string], [void], "nonpayable">;
+
+  setMetadata: TypedContractMethod<
+    [code: BigNumberish, md: ClueCode.CodeMetadataStruct],
+    [void],
+    "nonpayable"
+  >;
+
+  setMetadataBatch: TypedContractMethod<
+    [codes: BigNumberish[], mds: ClueCode.CodeMetadataStruct[]],
+    [void],
+    "nonpayable"
+  >;
+
   supportsInterface: TypedContractMethod<[id: BytesLike], [boolean], "view">;
 
   symbol: TypedContractMethod<[], [string], "view">;
@@ -700,6 +944,9 @@ export interface ClueCode extends BaseContract {
     nameOrSignature: "MAX_SUPPLY"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "METADATA_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "MINTER_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -716,6 +963,9 @@ export interface ClueCode extends BaseContract {
     nameOrSignature: "balanceOf"
   ): TypedContractMethod<[owner: AddressLike], [bigint], "view">;
   getFunction(
+    nameOrSignature: "baseURI"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "beginDefaultAdminTransfer"
   ): TypedContractMethod<[newAdmin: AddressLike], [void], "nonpayable">;
   getFunction(
@@ -728,6 +978,12 @@ export interface ClueCode extends BaseContract {
     nameOrSignature: "changeDefaultAdminDelay"
   ): TypedContractMethod<[newDelay: BigNumberish], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "clearMetadata"
+  ): TypedContractMethod<[code: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "codeFrozen"
+  ): TypedContractMethod<[arg0: BigNumberish], [boolean], "view">;
+  getFunction(
     nameOrSignature: "defaultAdmin"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -736,6 +992,12 @@ export interface ClueCode extends BaseContract {
   getFunction(
     nameOrSignature: "defaultAdminDelayIncreaseWait"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "freezeCode"
+  ): TypedContractMethod<[code: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "freezeMetadata"
+  ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "getApproved"
   ): TypedContractMethod<[tokenId: BigNumberish], [string], "view">;
@@ -752,6 +1014,9 @@ export interface ClueCode extends BaseContract {
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "hasMetadata"
+  ): TypedContractMethod<[code: BigNumberish], [boolean], "view">;
   getFunction(
     nameOrSignature: "hasRole"
   ): TypedContractMethod<
@@ -770,6 +1035,19 @@ export interface ClueCode extends BaseContract {
     nameOrSignature: "isValidCode"
   ): TypedContractMethod<[code: BigNumberish], [boolean], "view">;
   getFunction(
+    nameOrSignature: "metadata"
+  ): TypedContractMethod<[code: BigNumberish], [string], "view">;
+  getFunction(
+    nameOrSignature: "metadataFrozen"
+  ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "metadataOf"
+  ): TypedContractMethod<
+    [code: BigNumberish],
+    [ClueCode.CodeMetadataStructOutput],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "mint"
   ): TypedContractMethod<
     [to: AddressLike, code: BigNumberish],
@@ -780,6 +1058,13 @@ export interface ClueCode extends BaseContract {
     nameOrSignature: "mintBatch"
   ): TypedContractMethod<
     [to: AddressLike, codes: BigNumberish[]],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "mintWithMetadata"
+  ): TypedContractMethod<
+    [to: AddressLike, code: BigNumberish, md: ClueCode.CodeMetadataStruct],
     [void],
     "nonpayable"
   >;
@@ -850,6 +1135,23 @@ export interface ClueCode extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "setBaseURI"
+  ): TypedContractMethod<[newBaseURI: string], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setMetadata"
+  ): TypedContractMethod<
+    [code: BigNumberish, md: ClueCode.CodeMetadataStruct],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "setMetadataBatch"
+  ): TypedContractMethod<
+    [codes: BigNumberish[], mds: ClueCode.CodeMetadataStruct[]],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[id: BytesLike], [boolean], "view">;
   getFunction(
@@ -884,6 +1186,20 @@ export interface ClueCode extends BaseContract {
     ApprovalForAllEvent.OutputObject
   >;
   getEvent(
+    key: "BaseURIUpdated"
+  ): TypedContractEvent<
+    BaseURIUpdatedEvent.InputTuple,
+    BaseURIUpdatedEvent.OutputTuple,
+    BaseURIUpdatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "CodeMetadataFrozen"
+  ): TypedContractEvent<
+    CodeMetadataFrozenEvent.InputTuple,
+    CodeMetadataFrozenEvent.OutputTuple,
+    CodeMetadataFrozenEvent.OutputObject
+  >;
+  getEvent(
     key: "DefaultAdminDelayChangeCanceled"
   ): TypedContractEvent<
     DefaultAdminDelayChangeCanceledEvent.InputTuple,
@@ -910,6 +1226,27 @@ export interface ClueCode extends BaseContract {
     DefaultAdminTransferScheduledEvent.InputTuple,
     DefaultAdminTransferScheduledEvent.OutputTuple,
     DefaultAdminTransferScheduledEvent.OutputObject
+  >;
+  getEvent(
+    key: "MetadataFrozen"
+  ): TypedContractEvent<
+    MetadataFrozenEvent.InputTuple,
+    MetadataFrozenEvent.OutputTuple,
+    MetadataFrozenEvent.OutputObject
+  >;
+  getEvent(
+    key: "MetadataSet"
+  ): TypedContractEvent<
+    MetadataSetEvent.InputTuple,
+    MetadataSetEvent.OutputTuple,
+    MetadataSetEvent.OutputObject
+  >;
+  getEvent(
+    key: "MetadataUpdate"
+  ): TypedContractEvent<
+    MetadataUpdateEvent.InputTuple,
+    MetadataUpdateEvent.OutputTuple,
+    MetadataUpdateEvent.OutputObject
   >;
   getEvent(
     key: "RoleAdminChanged"
@@ -963,6 +1300,28 @@ export interface ClueCode extends BaseContract {
       ApprovalForAllEvent.OutputObject
     >;
 
+    "BaseURIUpdated(string)": TypedContractEvent<
+      BaseURIUpdatedEvent.InputTuple,
+      BaseURIUpdatedEvent.OutputTuple,
+      BaseURIUpdatedEvent.OutputObject
+    >;
+    BaseURIUpdated: TypedContractEvent<
+      BaseURIUpdatedEvent.InputTuple,
+      BaseURIUpdatedEvent.OutputTuple,
+      BaseURIUpdatedEvent.OutputObject
+    >;
+
+    "CodeMetadataFrozen(uint256)": TypedContractEvent<
+      CodeMetadataFrozenEvent.InputTuple,
+      CodeMetadataFrozenEvent.OutputTuple,
+      CodeMetadataFrozenEvent.OutputObject
+    >;
+    CodeMetadataFrozen: TypedContractEvent<
+      CodeMetadataFrozenEvent.InputTuple,
+      CodeMetadataFrozenEvent.OutputTuple,
+      CodeMetadataFrozenEvent.OutputObject
+    >;
+
     "DefaultAdminDelayChangeCanceled()": TypedContractEvent<
       DefaultAdminDelayChangeCanceledEvent.InputTuple,
       DefaultAdminDelayChangeCanceledEvent.OutputTuple,
@@ -1005,6 +1364,39 @@ export interface ClueCode extends BaseContract {
       DefaultAdminTransferScheduledEvent.InputTuple,
       DefaultAdminTransferScheduledEvent.OutputTuple,
       DefaultAdminTransferScheduledEvent.OutputObject
+    >;
+
+    "MetadataFrozen()": TypedContractEvent<
+      MetadataFrozenEvent.InputTuple,
+      MetadataFrozenEvent.OutputTuple,
+      MetadataFrozenEvent.OutputObject
+    >;
+    MetadataFrozen: TypedContractEvent<
+      MetadataFrozenEvent.InputTuple,
+      MetadataFrozenEvent.OutputTuple,
+      MetadataFrozenEvent.OutputObject
+    >;
+
+    "MetadataSet(uint256)": TypedContractEvent<
+      MetadataSetEvent.InputTuple,
+      MetadataSetEvent.OutputTuple,
+      MetadataSetEvent.OutputObject
+    >;
+    MetadataSet: TypedContractEvent<
+      MetadataSetEvent.InputTuple,
+      MetadataSetEvent.OutputTuple,
+      MetadataSetEvent.OutputObject
+    >;
+
+    "MetadataUpdate(uint256)": TypedContractEvent<
+      MetadataUpdateEvent.InputTuple,
+      MetadataUpdateEvent.OutputTuple,
+      MetadataUpdateEvent.OutputObject
+    >;
+    MetadataUpdate: TypedContractEvent<
+      MetadataUpdateEvent.InputTuple,
+      MetadataUpdateEvent.OutputTuple,
+      MetadataUpdateEvent.OutputObject
     >;
 
     "RoleAdminChanged(bytes32,bytes32,bytes32)": TypedContractEvent<

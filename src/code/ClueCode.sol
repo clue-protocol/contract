@@ -8,43 +8,69 @@ import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 
 /**
  * @title ClueCode
- * @notice ERC-721 representing ownership of a Provider Code of the Clue Protocol
- *         (the numeric prefix of a Clue ID, e.g. 27 in 27-1234567890).
+ * @notice ERC-721 representing ownership of a Provider Code of the Clue Protocol.
  *
- * Token model
- *  - tokenId == Provider Code read as an integer.
- *  - Grade S: 01-99 (2 digits), Grade A: 100-999 (3), Grade B: 10000-99999 (5).
- *  - Total supply is 90,999. Zero, 1000-9999 and >99999 can never be minted.
- *
- * ClueCode stores ownership only. Grade and canonical form are derived from the
- * token id. Capacity, zones, links, partitions, versions and status live in
- * ClueRegistry. The contract is not upgradeable and no role can transfer, burn,
- * pause or re-describe a token.
+ * Metadata model
+ *  - Each code may have metadata stored in this contract (name, description,
+ *    image, external URL, extra traits). tokenURI builds the JSON from it.
+ *  - Grade and Digits traits are always derived automatically.
+ *  - A code with no stored metadata falls back to baseURI + canonical code
+ *    (if baseURI is set), otherwise to a default on-chain JSON.
  *
  * NOTE: reference implementation, not audited.
  */
 contract ClueCode is ERC721, AccessControlDefaultAdminRules {
-    /// @dev Matches the pack enumeration: S = 1, A = 2, B = 3, 0 = invalid.
     enum Grade { None, S, A, B }
 
+    struct Trait {
+        string traitType;
+        string value;
+    }
+
+    struct CodeMetadata {
+        string name;         // empty => "Clue Provider Code <canonical>"
+        string description;  // empty => default description
+        string image;        // e.g. "ipfs://<cid>/02.png"; empty => omitted
+        string externalUrl;  // empty => omitted
+        Trait[] traits;      // extra traits, added after Grade and Digits
+    }
+
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant METADATA_ROLE = keccak256("METADATA_ROLE");
     uint256 public constant MAX_SUPPLY = 90_999;
 
-    /// @notice Number of codes minted so far.
     uint256 public totalMinted;
 
-    error InvalidProviderCode(uint256 code);
+    /// @notice Fallback base, used only for codes with no stored metadata.
+    string public baseURI;
 
-    /**
-     * @param admin      Multisig that manages roles.
-     * @param adminDelay Seconds before a default-admin change takes effect.
-     * @param minter     Genesis distributor that receives MINTER_ROLE.
-     */
-    constructor(address admin, uint48 adminDelay, address minter)
+    /// @notice Once true, no metadata or baseURI can ever change again.
+    bool public metadataFrozen;
+
+    mapping(uint256 => CodeMetadata) private _metadata;
+    mapping(uint256 => bool) private _hasMetadata;
+    mapping(uint256 => bool) public codeFrozen;
+
+    /// @dev ERC-4906: tells marketplaces to refresh a token.
+    event MetadataUpdate(uint256 _tokenId);
+    event MetadataSet(uint256 indexed code);
+    event CodeMetadataFrozen(uint256 indexed code);
+    event BaseURIUpdated(string newBaseURI);
+    event MetadataFrozen();
+
+    error InvalidProviderCode(uint256 code);
+    error MetadataIsFrozen();
+    error CodeMetadataIsFrozen(uint256 code);
+    error LengthMismatch();
+
+    constructor(address admin, uint48 adminDelay, address minter, string memory initialURI)
         ERC721("Clue Provider Code", "CPC")
         AccessControlDefaultAdminRules(adminDelay, admin)
     {
         _grantRole(MINTER_ROLE, minter);
+        _grantRole(METADATA_ROLE, admin);
+        // _grantRole(MINTER_ROLE, admin);
+        baseURI = initialURI;
     }
 
     // ------------------------------------------------------------------
@@ -58,18 +84,15 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules {
         return Grade.None;
     }
 
-    /// @notice True if `code` lies within a valid range.
     function isValidCode(uint256 code) public pure returns (bool) {
         return _grade(code) != Grade.None;
     }
 
-    /// @notice Grade of `code`; reverts with InvalidProviderCode for an invalid code.
     function gradeOf(uint256 code) public pure returns (Grade g) {
         g = _grade(code);
         if (g == Grade.None) revert InvalidProviderCode(code);
     }
 
-    /// @notice Zero-padded canonical string, e.g. 2 => "02", 100 => "100".
     function canonical(uint256 code) public pure returns (string memory) {
         Grade g = gradeOf(code);
         uint256 width = g == Grade.S ? 2 : g == Grade.A ? 3 : 5;
@@ -95,88 +118,212 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules {
         }
     }
 
+    /// @notice Mint a code and store its metadata in the same transaction.
+    function mintWithMetadata(address to, uint256 code, CodeMetadata calldata md)
+        external
+        onlyRole(MINTER_ROLE)
+    {
+        _mintCode(to, code);
+        _store(code, md);
+    }
+
     function _mintCode(address to, uint256 code) private {
-        gradeOf(code); // reverts for any value that is not a valid code
-        _mint(to, code); // reverts if the code already exists (or `to` is zero)
+        gradeOf(code);
+        _mint(to, code);
         unchecked {
             ++totalMinted;
         }
     }
 
     // ------------------------------------------------------------------
-    // Metadata: fully on-chain, static
+    // Metadata storage (METADATA_ROLE only)
     // ------------------------------------------------------------------
+
+    function setMetadata(uint256 code, CodeMetadata calldata md)
+        external
+        onlyRole(METADATA_ROLE)
+    {
+        _store(code, md);
+    }
+
+    function setMetadataBatch(uint256[] calldata codes, CodeMetadata[] calldata mds)
+        external
+        onlyRole(METADATA_ROLE)
+    {
+        if (codes.length != mds.length) revert LengthMismatch();
+        for (uint256 i; i < codes.length; ++i) {
+            _store(codes[i], mds[i]);
+        }
+    }
+
+    /// @notice Remove stored metadata so the code falls back to baseURI.
+    function clearMetadata(uint256 code) external onlyRole(METADATA_ROLE) {
+        _checkWritable(code);
+        delete _metadata[code];
+        _hasMetadata[code] = false;
+        emit MetadataSet(code);
+        emit MetadataUpdate(code);
+    }
+
+    function _checkWritable(uint256 code) private view {
+        gradeOf(code);
+        if (metadataFrozen) revert MetadataIsFrozen();
+        if (codeFrozen[code]) revert CodeMetadataIsFrozen(code);
+    }
+
+    function _store(uint256 code, CodeMetadata calldata md) private {
+        _checkWritable(code);
+        CodeMetadata storage s = _metadata[code];
+        s.name = md.name;
+        s.description = md.description;
+        s.image = md.image;
+        s.externalUrl = md.externalUrl;
+        delete s.traits;
+        for (uint256 i; i < md.traits.length; ++i) {
+            s.traits.push(Trait(md.traits[i].traitType, md.traits[i].value));
+        }
+        _hasMetadata[code] = true;
+        emit MetadataSet(code);
+        emit MetadataUpdate(code);
+    }
+
+    function setBaseURI(string calldata newBaseURI) external onlyRole(METADATA_ROLE) {
+        if (metadataFrozen) revert MetadataIsFrozen();
+        baseURI = newBaseURI;
+        emit BaseURIUpdated(newBaseURI);
+    }
+
+    /// @notice Permanently lock one code's metadata.
+    function freezeCode(uint256 code) external onlyRole(METADATA_ROLE) {
+        gradeOf(code);
+        codeFrozen[code] = true;
+        emit CodeMetadataFrozen(code);
+    }
+
+    /// @notice Permanently lock all metadata and the base URI.
+    function freezeMetadata() external onlyRole(METADATA_ROLE) {
+        metadataFrozen = true;
+        emit MetadataFrozen();
+    }
+
+    // ------------------------------------------------------------------
+    // Metadata reads
+    // ------------------------------------------------------------------
+
+    /// @notice The metadata JSON for `code`, exactly as the contract builds it.
+    function metadata(uint256 code) public view returns (string memory) {
+        gradeOf(code);
+        return _json(code);
+    }
+
+    /// @notice The raw stored fields for `code`.
+    function metadataOf(uint256 code) external view returns (CodeMetadata memory) {
+        gradeOf(code);
+        return _metadata[code];
+    }
+
+    function hasMetadata(uint256 code) external view returns (bool) {
+        return _hasMetadata[code];
+    }
 
     function tokenURI(uint256 code) public view override returns (string memory) {
         _requireOwned(code);
-        Grade g = gradeOf(code);
-        string memory c = canonical(code);
-
-        string memory image = string.concat(
-            "data:image/svg+xml;base64,",
-            Base64.encode(bytes(_svg(c, g)))
-        );
-
-        string memory head = string.concat(
-            '{"name":"Clue Provider Code ',
-            c,
-            '","description":"A Provider Code of the Clue Protocol.",'
-        );
-        string memory tail = string.concat(
-            '"image":"',
-            image,
-            '","attributes":',
-            _attributes(c, g),
-            "}"
-        );
-
+        if (!_hasMetadata[code] && bytes(baseURI).length != 0) {
+            return string.concat(baseURI, canonical(code));
+        }
         return string.concat(
             "data:application/json;base64,",
-            Base64.encode(bytes(string.concat(head, tail)))
+            Base64.encode(bytes(_json(code)))
         );
     }
 
-    // Built in separate steps to stay clear of the compiler's stack limit.
-    function _svg(string memory c, Grade g) private pure returns (string memory) {
-        string memory p1 = string.concat(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">',
-            '<rect width="400" height="400" fill="',
-            _gradeColor(g),
-            '"/>'
+    // ------------------------------------------------------------------
+    // JSON builder
+    // ------------------------------------------------------------------
+
+    function _json(uint256 code) private view returns (string memory) {
+        Grade g = gradeOf(code);
+        string memory c = canonical(code);
+        CodeMetadata storage m = _metadata[code];
+
+        string memory name = bytes(m.name).length != 0
+            ? m.name
+            : string.concat("Clue Provider Code ", c);
+        string memory desc = bytes(m.description).length != 0
+            ? m.description
+            : "A Provider Code of the Clue Protocol.";
+
+        string memory head = string.concat(
+            '{"name":"', _esc(name), '","description":"', _esc(desc), '"'
         );
-        string memory p2 = string.concat(
-            '<text x="200" y="215" font-size="96" text-anchor="middle" fill="#fff" font-family="monospace">',
-            c,
-            "</text>"
-        );
-        string memory p3 = string.concat(
-            '<text x="200" y="300" font-size="28" text-anchor="middle" fill="#fff" font-family="monospace">Grade ',
-            _gradeName(g),
-            "</text></svg>"
-        );
-        return string.concat(p1, p2, p3);
+
+        string memory mid = "";
+        if (bytes(m.image).length != 0) {
+            mid = string.concat(',"image":"', _esc(m.image), '"');
+        }
+        if (bytes(m.externalUrl).length != 0) {
+            mid = string.concat(mid, ',"external_url":"', _esc(m.externalUrl), '"');
+        }
+
+        return string.concat(head, mid, ',"attributes":', _attributes(c, g, m), "}");
     }
 
-    function _attributes(string memory c, Grade g) private pure returns (string memory) {
-        string memory a1 = string.concat('[{"trait_type":"Grade","value":"', _gradeName(g), '"},');
-        string memory a2 = string.concat(
+    function _attributes(string memory c, Grade g, CodeMetadata storage m)
+        private
+        view
+        returns (string memory out)
+    {
+        out = string.concat(
+            '[{"trait_type":"Grade","value":"', _gradeName(g), '"},',
             '{"trait_type":"Digits","display_type":"number","value":',
             Strings.toString(bytes(c).length),
-            "}]"
+            "}"
         );
-        return string.concat(a1, a2);
+        uint256 n = m.traits.length;
+        for (uint256 i; i < n; ++i) {
+            out = string.concat(
+                out,
+                ',{"trait_type":"', _esc(m.traits[i].traitType),
+                '","value":"', _esc(m.traits[i].value), '"}'
+            );
+        }
+        out = string.concat(out, "]");
     }
 
     function _gradeName(Grade g) private pure returns (string memory) {
         return g == Grade.S ? "S" : g == Grade.A ? "A" : "B";
     }
 
-    function _gradeColor(Grade g) private pure returns (string memory) {
-        return g == Grade.S ? "#1d1d1f" : g == Grade.A ? "#0b5fff" : "#0f766e";
+    /// @dev JSON string escaping: quote, backslash and control characters.
+    function _esc(string memory s) private pure returns (string memory) {
+        bytes memory b = bytes(s);
+        bytes memory out = new bytes(b.length * 6);
+        uint256 j;
+        bytes16 hexChars = "0123456789abcdef";
+        for (uint256 i; i < b.length; ++i) {
+            bytes1 ch = b[i];
+            if (ch == 0x22 || ch == 0x5c) {
+                out[j++] = 0x5c;
+                out[j++] = ch;
+            } else if (uint8(ch) < 0x20) {
+                out[j++] = 0x5c;
+                out[j++] = "u";
+                out[j++] = "0";
+                out[j++] = "0";
+                out[j++] = hexChars[uint8(ch) >> 4];
+                out[j++] = hexChars[uint8(ch) & 0x0f];
+            } else {
+                out[j++] = ch;
+            }
+        }
+        assembly {
+            mstore(out, j)
+        }
+        return string(out);
     }
 
     // ------------------------------------------------------------------
-    // ERC-165: both parents implement it
+    // ERC-165 (includes ERC-4906)
     // ------------------------------------------------------------------
 
     function supportsInterface(bytes4 id)
@@ -185,6 +332,6 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules {
         override(ERC721, AccessControlDefaultAdminRules)
         returns (bool)
     {
-        return super.supportsInterface(id);
+        return id == bytes4(0x49064906) || super.supportsInterface(id);
     }
 }

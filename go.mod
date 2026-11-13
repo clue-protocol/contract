@@ -3,8 +3,10 @@ module github.com/clue-protocol/contract
 go 1.25.6
 
 require (
+	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/ethereum/go-ethereum v1.17.10
-	github.com/pat3icki/pkgt v0.0.0-20261108082604-3cdba2de281d
+	github.com/pat3icki/pkgt v0.0.0-20261111231923-ea8fa182cb63
+	github.com/stretchr/testify v1.12.1
 )
 
 require (
@@ -34,6 +36,7 @@ require (
 	go.opentelemetry.io/otel v1.46.0 // indirect
 	go.opentelemetry.io/otel/metric v1.46.0 // indirect
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect

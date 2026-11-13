@@ -10,11 +10,14 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v6"
 	cluecode "github.com/clue-protocol/contract/out/go/code"
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -24,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pat3icki/pkgt/envt"
+	"github.com/stretchr/testify/require"
 )
 
 // ======================================================================
@@ -47,8 +51,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	gofakeit.Seed(0) // 0 = random seed, so each run picks different codes
 
-	cfg, cfgErr = loadConfig()
+	cfg, cfgErr = loadConfigJson()
 	if cfg != nil && cfgErr == nil {
 		cfgErr = connect()
 	}
@@ -57,6 +62,111 @@ func TestMain(m *testing.M) {
 		client.Close()
 	}
 	os.Exit(rc)
+}
+
+func findProjectRoot() (string, error) {
+	_, filename, _, ok := runtime.Caller(1)
+	if !ok {
+		return "", errors.New("envt: cannot get caller info to determine project root")
+	}
+
+	dir := filepath.Dir(filename)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		if _, err := os.Stat(filepath.Join(dir, "go.sum")); err == nil {
+			return dir, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errors.New("envt: go.mod/go.sum not found; are you inside a Go module?")
+		}
+		dir = parent
+	}
+}
+
+// loadConfigJson builds the Config from the newest deploy output written by
+// TestDeploy (tests/deploy/*.json). If no such file exists it falls back to
+// the CLUE_* variables in tests/.env.
+func loadConfigJson() (*Config, error) {
+	root, err := findProjectRoot()
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(root, "tests", "deploy")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return loadConfig()
+		}
+		return nil, err
+	}
+
+	// Pick the most recently modified .json file (ReadDir already returns
+	// bare names, so join with dir exactly once).
+	var newest string
+	var newestMod time.Time
+	for _, e := range entries {
+		if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".json") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if newest == "" || info.ModTime().After(newestMod) {
+			newest, newestMod = filepath.Join(dir, e.Name()), info.ModTime()
+		}
+	}
+	if newest == "" {
+		return loadConfig()
+	}
+
+	data, err := os.ReadFile(newest)
+	if err != nil {
+		return nil, err
+	}
+	// Values are not all strings (mintBatch is a bool, mintedCodes an array).
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", newest, err)
+	}
+	str := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := m[k].(string); ok && v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+
+	chainID, ok := new(big.Int).SetString(str("chainId", "chainid"), 10)
+	if !ok {
+		return nil, fmt.Errorf("%s: missing or invalid chainId", newest)
+	}
+	addr := str("contract address", "contractAddress")
+	if !common.IsHexAddress(addr) {
+		return nil, fmt.Errorf("%s: invalid contract address %q", newest, addr)
+	}
+	key, err := parseKey(str("admin key", "adminKey"))
+	if err != nil {
+		return nil, fmt.Errorf("%s: admin key: %w", newest, err)
+	}
+	c := &Config{
+		RPCURL:    str("rpc"),
+		ChainID:   chainID,
+		Contract:  common.HexToAddress(addr),
+		Key:       key,
+		MinterKey: key, // TestDeploy makes the deployer the minter by default
+		TxTimeout: 120 * time.Second,
+	}
+	if a := str("admin"); common.IsHexAddress(a) {
+		ad := common.HexToAddress(a)
+		c.Admin = &ad
+	}
+	return c, nil
 }
 
 func loadConfig() (*Config, error) {
@@ -148,11 +258,12 @@ func connect() error {
 	return err
 }
 
+// ======================================================================
+// Test helpers
+// ======================================================================
 func requireConfig(t *testing.T) {
 	t.Helper()
-	if cfgErr != nil {
-		t.Fatalf("test configuration error: %v", cfgErr)
-	}
+	require.NoError(t, cfgErr, "test configuration error")
 	if cfg == nil {
 		t.Skip("CLUE_RPC_URL not set; see tests/.env.example")
 	}
@@ -170,13 +281,9 @@ func requireMinter(t *testing.T) {
 	t.Helper()
 	requireSigner(t)
 	role, err := cc.MINTERROLE(nil)
-	if err != nil {
-		t.Fatalf("MINTER_ROLE: %v", err)
-	}
+	require.NoError(t, err, "MINTER_ROLE")
 	has, err := cc.HasRole(nil, role, crypto.PubkeyToAddress(cfg.MinterKey.PublicKey))
-	if err != nil {
-		t.Fatalf("hasRole: %v", err)
-	}
+	require.NoError(t, err, "hasRole")
 	if !has {
 		t.Skip("signer does not hold MINTER_ROLE (renounced or wrong key)")
 	}
@@ -187,35 +294,25 @@ func addrOf(k *ecdsa.PrivateKey) common.Address { return crypto.PubkeyToAddress(
 func txOpts(t *testing.T, k *ecdsa.PrivateKey) *bind.TransactOpts {
 	t.Helper()
 	auth, err := bind.NewKeyedTransactorWithChainID(k, cfg.ChainID)
-	if err != nil {
-		t.Fatalf("transactor: %v", err)
-	}
+	require.NoError(t, err, "transactor")
 	return auth
 }
 
 func mine(t *testing.T, tx *types.Transaction, err error) *types.Receipt {
 	t.Helper()
-	if err != nil {
-		t.Fatalf("send transaction: %v", err)
-	}
+	require.NoError(t, err, "send transaction")
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.TxTimeout)
 	defer cancel()
 	r, err := bind.WaitMined(ctx, client, tx)
-	if err != nil {
-		t.Fatalf("wait for %s: %v", tx.Hash(), err)
-	}
-	if r.Status != types.ReceiptStatusSuccessful {
-		t.Fatalf("transaction %s reverted", tx.Hash())
-	}
+	require.NoError(t, err, "wait for %s", tx.Hash())
+	require.Equal(t, types.ReceiptStatusSuccessful, r.Status, "transaction %s reverted", tx.Hash())
 	return r
 }
 
 func randomAddress(t *testing.T) common.Address {
 	t.Helper()
 	k, err := crypto.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return addrOf(k)
 }
 
@@ -254,12 +351,8 @@ func isRevert(err error, name string) bool {
 
 func requireRevert(t *testing.T, err error, name string) {
 	t.Helper()
-	if err == nil {
-		t.Fatalf("expected revert %s, call succeeded", name)
-	}
-	if !isRevert(err, name) {
-		t.Fatalf("expected revert %s, got: %v", name, err)
-	}
+	require.Error(t, err, "expected revert %s, call succeeded", name)
+	require.True(t, isRevert(err, name), "expected revert %s, got: %v", name, err)
 }
 
 // ======================================================================
@@ -271,6 +364,9 @@ const (
 	gradeA      uint8 = 2
 	gradeB      uint8 = 3
 	totalSupply       = 90_999
+
+	gradeBMin = 10000
+	gradeBMax = 99999
 )
 
 func refGrade(c uint64) uint8 {
@@ -279,7 +375,7 @@ func refGrade(c uint64) uint8 {
 		return gradeS
 	case c >= 100 && c <= 999:
 		return gradeA
-	case c >= 10000 && c <= 99999:
+	case c >= gradeBMin && c <= gradeBMax:
 		return gradeB
 	}
 	return gradeNone
@@ -324,100 +420,89 @@ var invalidVectors = []uint64{0, 1000, 1001, 5000, 9998, 9999, 100000, 100001, 1
 // ======================================================================
 func TestTokenMetadata(t *testing.T) {
 	requireConfig(t)
+
 	name, err := cc.Name(nil)
-	if err != nil || name != "Clue Provider Code" {
-		t.Fatalf("name = %q, err %v", name, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "Clue Provider Code", name)
+
 	symbol, err := cc.Symbol(nil)
-	if err != nil || symbol != "CPC" {
-		t.Fatalf("symbol = %q, err %v", symbol, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "CPC", symbol)
+
 	maxSupply, err := cc.MAXSUPPLY(nil)
-	if err != nil || maxSupply.Cmp(big.NewInt(totalSupply)) != 0 {
-		t.Fatalf("MAX_SUPPLY = %v, err %v", maxSupply, err)
-	}
+	require.NoError(t, err)
+	require.Zero(t, maxSupply.Cmp(big.NewInt(totalSupply)), "MAX_SUPPLY = %v", maxSupply)
+
 	minted, err := cc.TotalMinted(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if minted.Sign() < 0 || minted.Cmp(maxSupply) > 0 {
-		t.Fatalf("totalMinted %v outside [0, %v]", minted, maxSupply)
-	}
+	require.NoError(t, err)
+	require.False(t, minted.Sign() < 0 || minted.Cmp(maxSupply) > 0,
+		"totalMinted %v outside [0, %v]", minted, maxSupply)
 }
 
 func TestIsValidCode(t *testing.T) {
 	requireConfig(t)
+
 	for _, v := range validVectors {
-		ok, err := cc.IsValidCode(nil, bigInt(v.code))
-		if err != nil || !ok {
-			t.Errorf("isValidCode(%d) = %v, err %v; want true", v.code, ok, err)
-		}
+		t.Run(fmt.Sprintf("valid_%d", v.code), func(t *testing.T) {
+			ok, err := cc.IsValidCode(nil, bigInt(v.code))
+			require.NoError(t, err)
+			require.True(t, ok)
+		})
 	}
 	for _, c := range invalidVectors {
-		ok, err := cc.IsValidCode(nil, bigInt(c))
-		if err != nil || ok {
-			t.Errorf("isValidCode(%d) = %v, err %v; want false", c, ok, err)
-		}
+		t.Run(fmt.Sprintf("invalid_%d", c), func(t *testing.T) {
+			ok, err := cc.IsValidCode(nil, bigInt(c))
+			require.NoError(t, err)
+			require.False(t, ok)
+		})
 	}
-	huge := new(big.Int).Lsh(big.NewInt(1), 255)
-	if ok, err := cc.IsValidCode(nil, huge); err != nil || ok {
-		t.Errorf("isValidCode(2^255) = %v, err %v; want false", ok, err)
-	}
+	t.Run("invalid_2^255", func(t *testing.T) {
+		huge := new(big.Int).Lsh(big.NewInt(1), 255)
+		ok, err := cc.IsValidCode(nil, huge)
+		require.NoError(t, err)
+		require.False(t, ok)
+	})
 }
 
 func TestGradeOf(t *testing.T) {
 	requireConfig(t)
 	for _, v := range validVectors {
-		g, err := cc.GradeOf(nil, bigInt(v.code))
-		if err != nil {
-			t.Errorf("gradeOf(%d): %v", v.code, err)
-			continue
-		}
-		if g != v.grade {
-			t.Errorf("gradeOf(%d) = %d, want %d", v.code, g, v.grade)
-		}
+		t.Run(fmt.Sprintf("code_%d", v.code), func(t *testing.T) {
+			g, err := cc.GradeOf(nil, bigInt(v.code))
+			require.NoError(t, err)
+			require.Equal(t, v.grade, g)
+		})
 	}
 }
 
 func TestGradeOfInvalidReverts(t *testing.T) {
 	requireConfig(t)
 	for _, c := range invalidVectors {
-		_, err := cc.GradeOf(nil, bigInt(c))
-		if err == nil {
-			t.Errorf("gradeOf(%d) succeeded, want InvalidProviderCode", c)
-			continue
-		}
-		if !isRevert(err, "InvalidProviderCode") {
-			t.Errorf("gradeOf(%d): wrong error: %v", c, err)
-		}
+		t.Run(fmt.Sprintf("code_%d", c), func(t *testing.T) {
+			_, err := cc.GradeOf(nil, bigInt(c))
+			requireRevert(t, err, "InvalidProviderCode")
+		})
 	}
 }
 
 func TestCanonical(t *testing.T) {
 	requireConfig(t)
 	for _, v := range validVectors {
-		s, err := cc.Canonical(nil, bigInt(v.code))
-		if err != nil {
-			t.Errorf("canonical(%d): %v", v.code, err)
-			continue
-		}
-		if s != v.canonical {
-			t.Errorf("canonical(%d) = %q, want %q", v.code, s, v.canonical)
-		}
+		t.Run(fmt.Sprintf("code_%d", v.code), func(t *testing.T) {
+			s, err := cc.Canonical(nil, bigInt(v.code))
+			require.NoError(t, err)
+			require.Equal(t, v.canonical, s)
+		})
 	}
 }
 
 func TestCanonicalInvalidReverts(t *testing.T) {
 	requireConfig(t)
 	for _, c := range invalidVectors {
-		_, err := cc.Canonical(nil, bigInt(c))
-		if err == nil {
-			t.Errorf("canonical(%d) succeeded, want InvalidProviderCode", c)
-			continue
-		}
-		if !isRevert(err, "InvalidProviderCode") {
-			t.Errorf("canonical(%d): wrong error: %v", c, err)
-		}
+		t.Run(fmt.Sprintf("code_%d", c), func(t *testing.T) {
+			_, err := cc.Canonical(nil, bigInt(c))
+			requireRevert(t, err, "InvalidProviderCode")
+		})
 	}
 }
 
@@ -429,24 +514,19 @@ func TestParitySweep(t *testing.T) {
 	check := func(c uint64) {
 		t.Helper()
 		ok, err := cc.IsValidCode(nil, bigInt(c))
-		if err != nil {
-			t.Fatalf("isValidCode(%d): %v", c, err)
-		}
+		require.NoError(t, err, "isValidCode(%d)", c)
 		g := refGrade(c)
-		if ok != (g != gradeNone) {
-			t.Fatalf("isValidCode(%d) = %v, reference grade %d", c, ok, g)
-		}
+		require.Equal(t, g != gradeNone, ok, "isValidCode(%d), reference grade %d", c, g)
 		if g == gradeNone {
 			return
 		}
 		onchainGrade, err := cc.GradeOf(nil, bigInt(c))
-		if err != nil || onchainGrade != g {
-			t.Fatalf("gradeOf(%d) = %d, err %v; want %d", c, onchainGrade, err, g)
-		}
+		require.NoError(t, err, "gradeOf(%d)", c)
+		require.Equal(t, g, onchainGrade, "gradeOf(%d)", c)
+
 		s, err := cc.Canonical(nil, bigInt(c))
-		if err != nil || s != refCanonical(c) {
-			t.Fatalf("canonical(%d) = %q, err %v; want %q", c, s, err, refCanonical(c))
-		}
+		require.NoError(t, err, "canonical(%d)", c)
+		require.Equal(t, refCanonical(c), s, "canonical(%d)", c)
 	}
 	for c := uint64(1); c <= 999; c++ {
 		check(c)
@@ -454,7 +534,7 @@ func TestParitySweep(t *testing.T) {
 	for _, c := range []uint64{1000, 1001, 9998, 9999, 10000, 10001, 99998, 99999, 100000, 100001} {
 		check(c)
 	}
-	for c := uint64(10000); c <= 99999; c += 997 {
+	for c := uint64(gradeBMin); c <= gradeBMax; c += 997 {
 		check(c)
 	}
 }
@@ -464,44 +544,36 @@ func TestParitySweep(t *testing.T) {
 // ======================================================================
 func TestRoleConstants(t *testing.T) {
 	requireConfig(t)
+
 	minter, err := cc.MINTERROLE(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := crypto.Keccak256Hash([]byte("MINTER_ROLE")); common.Hash(minter) != want {
-		t.Fatalf("MINTER_ROLE = %x, want keccak256(\"MINTER_ROLE\") = %s", minter, want)
-	}
+	require.NoError(t, err)
+	want := crypto.Keccak256Hash([]byte("MINTER_ROLE"))
+	require.Equal(t, want, common.Hash(minter), `MINTER_ROLE != keccak256("MINTER_ROLE")`)
+
 	admin, err := cc.DEFAULTADMINROLE(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if admin != [32]byte{} {
-		t.Fatalf("DEFAULT_ADMIN_ROLE = %x, want zero", admin)
-	}
+	require.NoError(t, err)
+	require.Equal(t, [32]byte{}, admin, "DEFAULT_ADMIN_ROLE should be zero")
 }
 
 func TestDefaultAdmin(t *testing.T) {
 	requireConfig(t)
+
 	got, err := cc.DefaultAdmin(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Admin != nil && got != *cfg.Admin {
-		t.Fatalf("defaultAdmin = %s, want %s", got, *cfg.Admin)
+	require.NoError(t, err)
+	if cfg.Admin != nil {
+		require.Equal(t, *cfg.Admin, got, "defaultAdmin")
 	}
 	if got == (common.Address{}) {
 		t.Log("default admin renounced: role management is permanently frozen")
 		return
 	}
 	delay, err := cc.DefaultAdminDelay(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Logf("defaultAdmin %s, delay %s seconds", got, delay)
+
 	hasRole, err := cc.HasRole(nil, [32]byte{}, got)
-	if err != nil || !hasRole {
-		t.Fatalf("hasRole(DEFAULT_ADMIN_ROLE, %s) = %v, err %v", got, hasRole, err)
-	}
+	require.NoError(t, err)
+	require.True(t, hasRole, "hasRole(DEFAULT_ADMIN_ROLE, %s)", got)
 }
 
 func TestSupportsInterface(t *testing.T) {
@@ -519,27 +591,21 @@ func TestSupportsInterface(t *testing.T) {
 		{"invalid 0xffffffff", [4]byte{0xff, 0xff, 0xff, 0xff}, false},
 	}
 	for _, c := range cases {
-		got, err := cc.SupportsInterface(nil, c.id)
-		if err != nil {
-			t.Errorf("%s: %v", c.name, err)
-			continue
-		}
-		if got != c.want {
-			t.Errorf("supportsInterface(%s) = %v, want %v", c.name, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			got, err := cc.SupportsInterface(nil, c.id)
+			require.NoError(t, err)
+			require.Equal(t, c.want, got)
+		})
 	}
 }
 
 func callAs(t *testing.T, from common.Address, method string, args ...interface{}) error {
 	t.Helper()
 	parsed, err := cluecode.ClueCodeMetaData.GetAbi()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	data, err := parsed.Pack(method, args...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_, err = client.CallContract(ctx, ethereum.CallMsg{From: from, To: &cfg.Contract, Data: data}, nil)
@@ -557,9 +623,7 @@ func TestGrantRoleRequiresAdmin(t *testing.T) {
 	requireConfig(t)
 	stranger := randomAddress(t)
 	minter, err := cc.MINTERROLE(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	requireRevert(t, callAs(t, stranger, "grantRole", minter, stranger), "AccessControlUnauthorizedAccount")
 }
 
@@ -573,35 +637,39 @@ func TestDefaultAdminRulesEnforced(t *testing.T) {
 
 func TestTokenURIUnmintedReverts(t *testing.T) {
 	requireConfig(t)
-	for _, c := range []uint64{99999, 99998, 99997, 99996, 99995} {
-		if _, err := cc.OwnerOf(nil, bigInt(c)); err == nil {
-			continue
-		}
-		_, err := cc.TokenURI(nil, bigInt(c))
-		requireRevert(t, err, "ERC721NonexistentToken")
-		return
-	}
-	t.Skip("codes 99995-99999 are all minted; nothing unminted to test")
+	code := freeCodes(t, 1)[0]
+	_, err := cc.TokenURI(nil, bigInt(code))
+	requireRevert(t, err, "ERC721NonexistentToken")
 }
 
 // ======================================================================
 // State-changing: mint, batch, transfer
 // ======================================================================
+
+// freeCodes returns n distinct, random, unminted Grade B codes. Random picks
+// (rather than scanning from 99999) keep repeated or concurrent runs from
+// colliding on the same codes.
 func freeCodes(t *testing.T, n int) []uint64 {
 	t.Helper()
-	var out []uint64
-	for c := uint64(99999); c >= 10000 && len(out) < n; c-- {
-		_, err := cc.OwnerOf(nil, bigInt(c))
-		if err == nil {
+	seen := make(map[uint64]struct{}, n)
+	out := make([]uint64, 0, n)
+	for attempts := 0; len(out) < n && attempts < 50*n+200; attempts++ {
+		c := uint64(gofakeit.Number(gradeBMin, gradeBMax))
+		if _, dup := seen[c]; dup {
 			continue
 		}
-		if !isRevert(err, "ERC721NonexistentToken") {
-			t.Fatalf("ownerOf(%d): unexpected error: %v", c, err)
+		seen[c] = struct{}{}
+
+		_, err := cc.OwnerOf(nil, bigInt(c))
+		if err == nil {
+			continue // already minted
 		}
+		require.True(t, isRevert(err, "ERC721NonexistentToken"),
+			"ownerOf(%d): unexpected error: %v", c, err)
 		out = append(out, c)
 	}
 	if len(out) < n {
-		t.Skipf("fewer than %d unminted Grade B codes available", n)
+		t.Skipf("fewer than %d unminted Grade B codes found", n)
 	}
 	return out
 }
@@ -619,13 +687,9 @@ type tokenMeta struct {
 
 func decodeDataURI(t *testing.T, uri, prefix string) []byte {
 	t.Helper()
-	if !strings.HasPrefix(uri, prefix) {
-		t.Fatalf("URI does not start with %q: %.60s", prefix, uri)
-	}
+	require.True(t, strings.HasPrefix(uri, prefix), "URI does not start with %q: %.60s", prefix, uri)
 	b, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(uri, prefix))
-	if err != nil {
-		t.Fatalf("base64 decode: %v", err)
-	}
+	require.NoError(t, err, "base64 decode")
 	return b
 }
 
@@ -635,39 +699,44 @@ func TestMintTransferAndMetadata(t *testing.T) {
 	minterAuth := txOpts(t, cfg.MinterKey)
 	code := freeCodes(t, 1)[0]
 	id := bigInt(code)
+
 	before, err := cc.TotalMinted(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	tx, err := cc.Mint(minterAuth, owner, id)
 	mine(t, tx, err)
+
 	got, err := cc.OwnerOf(nil, id)
-	if err != nil || got != owner {
-		t.Fatalf("ownerOf(%d) = %s, err %v; want %s", code, got, err, owner)
-	}
+	require.NoError(t, err, "ownerOf(%d)", code)
+	require.Equal(t, owner, got, "ownerOf(%d)", code)
+
 	after, err := cc.TotalMinted(nil)
-	if err != nil || new(big.Int).Sub(after, before).Int64() != 1 {
-		t.Fatalf("totalMinted %v -> %v, want +1 (err %v)", before, after, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(1), new(big.Int).Sub(after, before).Int64(),
+		"totalMinted %v -> %v, want +1", before, after)
+
+	// --- tokenURI ---
 	uri, err := cc.TokenURI(nil, id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var meta tokenMeta
-	if err := json.Unmarshal(decodeDataURI(t, uri, "data:application/json;base64,"), &meta); err != nil {
-		t.Fatalf("tokenURI JSON: %v", err)
-	}
+	require.NoError(t, err)
 	canon := refCanonical(code)
-	if meta.Name != "Clue Provider Code "+canon {
-		t.Errorf("name = %q", meta.Name)
+	base, err := cc.BaseURI(nil)
+	require.NoError(t, err)
+	if base != "" {
+		// No stored metadata + non-empty baseURI => tokenURI = baseURI + canonical code.
+		require.Equal(t, base+canon, uri, "tokenURI should be baseURI+canonical")
+	} else {
+		// Empty baseURI => default on-chain JSON.
+		var meta tokenMeta
+		require.NoError(t, json.Unmarshal(decodeDataURI(t, uri, "data:application/json;base64,"), &meta),
+			"tokenURI JSON")
+		require.Equal(t, "Clue Provider Code "+canon, meta.Name)
+		require.Len(t, meta.Attributes, 2, "attributes = %+v, want Grade B / 5 digits", meta.Attributes)
+		require.Equal(t, "B", meta.Attributes[0].Value)
+		require.Equal(t, float64(5), meta.Attributes[1].Value)
+		require.Empty(t, meta.Image, "no stored metadata set")
 	}
-	if len(meta.Attributes) != 2 || meta.Attributes[0].Value != "B" || meta.Attributes[1].Value != float64(5) {
-		t.Errorf("attributes = %+v, want Grade B / 5 digits", meta.Attributes)
-	}
-	svg := string(decodeDataURI(t, meta.Image, "data:image/svg+xml;base64,"))
-	if !strings.Contains(svg, ">"+canon+"</text>") || !strings.Contains(svg, "Grade B</text>") {
-		t.Errorf("svg does not show code %s / Grade B: %s", canon, svg)
-	}
+
+	// --- invalid mints ---
 	_, err = cc.Mint(minterAuth, owner, id)
 	requireRevert(t, err, "ERC721InvalidSender")
 	_, err = cc.Mint(minterAuth, owner, big.NewInt(1000))
@@ -676,29 +745,37 @@ func TestMintTransferAndMetadata(t *testing.T) {
 	requireRevert(t, err, "InvalidProviderCode")
 	_, err = cc.Mint(minterAuth, common.Address{}, bigInt(code-1))
 	requireRevert(t, err, "ERC721InvalidReceiver")
+
+	// A minter that is not the owner has no transfer rights.
 	if addrOf(cfg.MinterKey) != owner {
 		_, err = cc.TransferFrom(minterAuth, owner, addrOf(cfg.MinterKey), id)
 		requireRevert(t, err, "ERC721InsufficientApproval")
 	}
+
+	// --- approve and transfer ---
 	ownerAuth := txOpts(t, cfg.Key)
 	operator := randomAddress(t)
 	tx, err = cc.Approve(ownerAuth, operator, id)
 	mine(t, tx, err)
-	if a, err := cc.GetApproved(nil, id); err != nil || a != operator {
-		t.Fatalf("getApproved = %s, err %v; want %s", a, err, operator)
-	}
+	approved, err := cc.GetApproved(nil, id)
+	require.NoError(t, err)
+	require.Equal(t, operator, approved, "getApproved")
+
 	recipient := randomAddress(t)
 	tx, err = cc.TransferFrom(ownerAuth, owner, recipient, id)
 	mine(t, tx, err)
-	if o, err := cc.OwnerOf(nil, id); err != nil || o != recipient {
-		t.Fatalf("after transfer ownerOf = %s, err %v; want %s", o, err, recipient)
-	}
-	if a, err := cc.GetApproved(nil, id); err != nil || a != (common.Address{}) {
-		t.Fatalf("approval not cleared after transfer: %s, err %v", a, err)
-	}
-	if b, err := cc.BalanceOf(nil, recipient); err != nil || b.Int64() != 1 {
-		t.Fatalf("balanceOf(recipient) = %v, err %v", b, err)
-	}
+
+	newOwner, err := cc.OwnerOf(nil, id)
+	require.NoError(t, err)
+	require.Equal(t, recipient, newOwner, "ownerOf after transfer")
+
+	approved, err = cc.GetApproved(nil, id)
+	require.NoError(t, err)
+	require.Equal(t, common.Address{}, approved, "approval not cleared after transfer")
+
+	bal, err := cc.BalanceOf(nil, recipient)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), bal.Int64(), "balanceOf(recipient)")
 }
 
 func TestMintBatch(t *testing.T) {
@@ -706,26 +783,31 @@ func TestMintBatch(t *testing.T) {
 	owner := addrOf(cfg.Key)
 	auth := txOpts(t, cfg.MinterKey)
 	codes := freeCodes(t, 3)
+
+	// A batch containing one invalid code must revert atomically.
 	bad := []*big.Int{bigInt(codes[0]), bigInt(codes[1]), big.NewInt(1000)}
 	_, err := cc.MintBatch(auth, owner, bad)
 	requireRevert(t, err, "InvalidProviderCode")
-	if _, err := cc.OwnerOf(nil, bigInt(codes[0])); !isRevert(err, "ERC721NonexistentToken") {
-		t.Fatalf("code %d was minted by a failed batch (err %v)", codes[0], err)
-	}
+
+	_, err = cc.OwnerOf(nil, bigInt(codes[0]))
+	require.True(t, isRevert(err, "ERC721NonexistentToken"),
+		"code %d was minted by a failed batch (err %v)", codes[0], err)
+
 	before, err := cc.TotalMinted(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	good := []*big.Int{bigInt(codes[0]), bigInt(codes[1]), bigInt(codes[2])}
 	tx, err := cc.MintBatch(auth, owner, good)
 	mine(t, tx, err)
+
 	for _, c := range codes {
-		if o, err := cc.OwnerOf(nil, bigInt(c)); err != nil || o != owner {
-			t.Errorf("ownerOf(%d) = %s, err %v; want %s", c, o, err, owner)
-		}
+		o, err := cc.OwnerOf(nil, bigInt(c))
+		require.NoError(t, err, "ownerOf(%d)", c)
+		require.Equal(t, owner, o, "ownerOf(%d)", c)
 	}
+
 	after, err := cc.TotalMinted(nil)
-	if err != nil || new(big.Int).Sub(after, before).Int64() != 3 {
-		t.Fatalf("totalMinted %v -> %v, want +3 (err %v)", before, after, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(3), new(big.Int).Sub(after, before).Int64(),
+		"totalMinted %v -> %v, want +3", before, after)
 }
