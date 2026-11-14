@@ -2,3 +2,4 @@ node_modules/
 vendor
 tests/.env
 tests/deploy
+contract/artifacts/build-info
