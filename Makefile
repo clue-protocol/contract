@@ -106,3 +106,7 @@ clean-all: clean ## Remove build artefacts + node_modules
 	@echo "→ Removing node_modules..."
 	rm -rf $(CONTRACT_DIR)/node_modules
 	@echo "✓ Full clean done."
+
+refresh: ## Refresh the Project after Update
+	go mod tidy
+	drag  -exclude node_modules -exclude vendor -e artifacts -e cache -e typechain-types -c tests/deploy .
