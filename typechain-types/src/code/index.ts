@@ -2,3 +2,4 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { ClueCode } from "./ClueCode";
+export type { IClueCode } from "./IClueCode";

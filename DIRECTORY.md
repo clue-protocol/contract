@@ -1,6 +1,6 @@
 # Directory Structure: `.`
 
-> **Generated:** 2026-11-14 13:04:09 | **Directories:** 11 | **Files:** 20
+> **Generated:** 2026-11-14 17:58:03 | **Directories:** 11 | **Files:** 21
 
 ```txt
 contract/
@@ -19,6 +19,7 @@ contract/
 |---- src/
 |       |---- code/
 |       |       |---- ClueCode.sol
+|       |       |---- IClueCode.sol
 |       |       |---- README.md
 |       |---- registry/
 |---- tests/

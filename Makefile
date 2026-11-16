@@ -110,3 +110,4 @@ clean-all: clean ## Remove build artefacts + node_modules
 refresh: ## Refresh the Project after Update
 	go mod tidy
 	drag  -exclude node_modules -exclude vendor -e artifacts -e cache -e typechain-types -c tests/deploy .
+	@echo "Refresh Done ✓ " 

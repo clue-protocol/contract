@@ -23,7 +23,7 @@ import type {
   TypedContractMethod,
 } from "../../common";
 
-export declare namespace ClueCode {
+export declare namespace IClueCode {
   export type TraitStruct = { traitType: string; value: string };
 
   export type TraitStructOutput = [traitType: string, value: string] & {
@@ -36,7 +36,7 @@ export declare namespace ClueCode {
     description: string;
     image: string;
     externalUrl: string;
-    traits: ClueCode.TraitStruct[];
+    traits: IClueCode.TraitStruct[];
   };
 
   export type CodeMetadataStructOutput = [
@@ -44,13 +44,13 @@ export declare namespace ClueCode {
     description: string,
     image: string,
     externalUrl: string,
-    traits: ClueCode.TraitStructOutput[]
+    traits: IClueCode.TraitStructOutput[]
   ] & {
     name: string;
     description: string;
     image: string;
     externalUrl: string;
-    traits: ClueCode.TraitStructOutput[];
+    traits: IClueCode.TraitStructOutput[];
   };
 }
 
@@ -116,6 +116,7 @@ export interface ClueCodeInterface extends Interface {
       | "Approval"
       | "ApprovalForAll"
       | "BaseURIUpdated"
+      | "BatchMetadataUpdate"
       | "CodeMetadataFrozen"
       | "DefaultAdminDelayChangeCanceled"
       | "DefaultAdminDelayChangeScheduled"
@@ -257,7 +258,7 @@ export interface ClueCodeInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "mintWithMetadata",
-    values: [AddressLike, BigNumberish, ClueCode.CodeMetadataStruct]
+    values: [AddressLike, BigNumberish, IClueCode.CodeMetadataStruct]
   ): string;
   encodeFunctionData(functionFragment: "name", values?: undefined): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
@@ -300,11 +301,11 @@ export interface ClueCodeInterface extends Interface {
   encodeFunctionData(functionFragment: "setBaseURI", values: [string]): string;
   encodeFunctionData(
     functionFragment: "setMetadata",
-    values: [BigNumberish, ClueCode.CodeMetadataStruct]
+    values: [BigNumberish, IClueCode.CodeMetadataStruct]
   ): string;
   encodeFunctionData(
     functionFragment: "setMetadataBatch",
-    values: [BigNumberish[], ClueCode.CodeMetadataStruct[]]
+    values: [BigNumberish[], IClueCode.CodeMetadataStruct[]]
   ): string;
   encodeFunctionData(
     functionFragment: "supportsInterface",
@@ -516,6 +517,22 @@ export namespace BaseURIUpdatedEvent {
   export type OutputTuple = [newBaseURI: string];
   export interface OutputObject {
     newBaseURI: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace BatchMetadataUpdateEvent {
+  export type InputTuple = [
+    _fromTokenId: BigNumberish,
+    _toTokenId: BigNumberish
+  ];
+  export type OutputTuple = [_fromTokenId: bigint, _toTokenId: bigint];
+  export interface OutputObject {
+    _fromTokenId: bigint;
+    _toTokenId: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -828,7 +845,7 @@ export interface ClueCode extends BaseContract {
 
   metadataOf: TypedContractMethod<
     [code: BigNumberish],
-    [ClueCode.CodeMetadataStructOutput],
+    [IClueCode.CodeMetadataStructOutput],
     "view"
   >;
 
@@ -845,7 +862,7 @@ export interface ClueCode extends BaseContract {
   >;
 
   mintWithMetadata: TypedContractMethod<
-    [to: AddressLike, code: BigNumberish, md: ClueCode.CodeMetadataStruct],
+    [to: AddressLike, code: BigNumberish, md: IClueCode.CodeMetadataStruct],
     [void],
     "nonpayable"
   >;
@@ -908,13 +925,13 @@ export interface ClueCode extends BaseContract {
   setBaseURI: TypedContractMethod<[newBaseURI: string], [void], "nonpayable">;
 
   setMetadata: TypedContractMethod<
-    [code: BigNumberish, md: ClueCode.CodeMetadataStruct],
+    [code: BigNumberish, md: IClueCode.CodeMetadataStruct],
     [void],
     "nonpayable"
   >;
 
   setMetadataBatch: TypedContractMethod<
-    [codes: BigNumberish[], mds: ClueCode.CodeMetadataStruct[]],
+    [codes: BigNumberish[], mds: IClueCode.CodeMetadataStruct[]],
     [void],
     "nonpayable"
   >;
@@ -1044,7 +1061,7 @@ export interface ClueCode extends BaseContract {
     nameOrSignature: "metadataOf"
   ): TypedContractMethod<
     [code: BigNumberish],
-    [ClueCode.CodeMetadataStructOutput],
+    [IClueCode.CodeMetadataStructOutput],
     "view"
   >;
   getFunction(
@@ -1064,7 +1081,7 @@ export interface ClueCode extends BaseContract {
   getFunction(
     nameOrSignature: "mintWithMetadata"
   ): TypedContractMethod<
-    [to: AddressLike, code: BigNumberish, md: ClueCode.CodeMetadataStruct],
+    [to: AddressLike, code: BigNumberish, md: IClueCode.CodeMetadataStruct],
     [void],
     "nonpayable"
   >;
@@ -1140,14 +1157,14 @@ export interface ClueCode extends BaseContract {
   getFunction(
     nameOrSignature: "setMetadata"
   ): TypedContractMethod<
-    [code: BigNumberish, md: ClueCode.CodeMetadataStruct],
+    [code: BigNumberish, md: IClueCode.CodeMetadataStruct],
     [void],
     "nonpayable"
   >;
   getFunction(
     nameOrSignature: "setMetadataBatch"
   ): TypedContractMethod<
-    [codes: BigNumberish[], mds: ClueCode.CodeMetadataStruct[]],
+    [codes: BigNumberish[], mds: IClueCode.CodeMetadataStruct[]],
     [void],
     "nonpayable"
   >;
@@ -1191,6 +1208,13 @@ export interface ClueCode extends BaseContract {
     BaseURIUpdatedEvent.InputTuple,
     BaseURIUpdatedEvent.OutputTuple,
     BaseURIUpdatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "BatchMetadataUpdate"
+  ): TypedContractEvent<
+    BatchMetadataUpdateEvent.InputTuple,
+    BatchMetadataUpdateEvent.OutputTuple,
+    BatchMetadataUpdateEvent.OutputObject
   >;
   getEvent(
     key: "CodeMetadataFrozen"
@@ -1309,6 +1333,17 @@ export interface ClueCode extends BaseContract {
       BaseURIUpdatedEvent.InputTuple,
       BaseURIUpdatedEvent.OutputTuple,
       BaseURIUpdatedEvent.OutputObject
+    >;
+
+    "BatchMetadataUpdate(uint256,uint256)": TypedContractEvent<
+      BatchMetadataUpdateEvent.InputTuple,
+      BatchMetadataUpdateEvent.OutputTuple,
+      BatchMetadataUpdateEvent.OutputObject
+    >;
+    BatchMetadataUpdate: TypedContractEvent<
+      BatchMetadataUpdateEvent.InputTuple,
+      BatchMetadataUpdateEvent.OutputTuple,
+      BatchMetadataUpdateEvent.OutputObject
     >;
 
     "CodeMetadataFrozen(uint256)": TypedContractEvent<

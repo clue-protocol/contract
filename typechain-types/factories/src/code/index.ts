@@ -2,3 +2,4 @@
 /* tslint:disable */
 /* eslint-disable */
 export { ClueCode__factory } from "./ClueCode__factory";
+export { IClueCode__factory } from "./IClueCode__factory";

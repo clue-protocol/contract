@@ -5,7 +5,8 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {AccessControlDefaultAdminRules} from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
-
+import {IClueCode} from "./IClueCode.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 /**
  * @title ClueCode
  * @notice ERC-721 representing ownership of a Provider Code of the Clue Protocol.
@@ -19,22 +20,7 @@ import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
  *
  * NOTE: reference implementation, not audited.
  */
-contract ClueCode is ERC721, AccessControlDefaultAdminRules {
-    enum Grade { None, S, A, B }
-
-    struct Trait {
-        string traitType;
-        string value;
-    }
-
-    struct CodeMetadata {
-        string name;         // empty => "Clue Provider Code <canonical>"
-        string description;  // empty => default description
-        string image;        // e.g. "ipfs://<cid>/02.png"; empty => omitted
-        string externalUrl;  // empty => omitted
-        Trait[] traits;      // extra traits, added after Grade and Digits
-    }
-
+contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant METADATA_ROLE = keccak256("METADATA_ROLE");
     uint256 public constant MAX_SUPPLY = 90_999;
@@ -51,25 +37,12 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules {
     mapping(uint256 => bool) private _hasMetadata;
     mapping(uint256 => bool) public codeFrozen;
 
-    /// @dev ERC-4906: tells marketplaces to refresh a token.
-    event MetadataUpdate(uint256 _tokenId);
-    event MetadataSet(uint256 indexed code);
-    event CodeMetadataFrozen(uint256 indexed code);
-    event BaseURIUpdated(string newBaseURI);
-    event MetadataFrozen();
-
-    error InvalidProviderCode(uint256 code);
-    error MetadataIsFrozen();
-    error CodeMetadataIsFrozen(uint256 code);
-    error LengthMismatch();
-
     constructor(address admin, uint48 adminDelay, address minter, string memory initialURI)
         ERC721("Clue Provider Code", "CPC")
         AccessControlDefaultAdminRules(adminDelay, admin)
     {
         _grantRole(MINTER_ROLE, minter);
         _grantRole(METADATA_ROLE, admin);
-        // _grantRole(MINTER_ROLE, admin);
         baseURI = initialURI;
     }
 
@@ -108,6 +81,11 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules {
     // Minting (MINTER_ROLE only)
     // ------------------------------------------------------------------
 
+    /// @notice True if `code` has been minted.
+    function isMinted(uint256 code) public view returns (bool) {
+        return _ownerOf(code) != address(0);
+    }
+
     function mint(address to, uint256 code) external onlyRole(MINTER_ROLE) {
         _mintCode(to, code);
     }
@@ -128,7 +106,13 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules {
     }
 
     function _mintCode(address to, uint256 code) private {
+        // 1. Must be a valid code number (S: 1-99, A: 100-999, B: 10000-99999).
+        //    Reverts with InvalidProviderCode(code) otherwise.
         gradeOf(code);
+
+        // 2. Must not already be minted.
+        if (_ownerOf(code) != address(0)) revert CodeAlreadyMinted(code);
+
         _mint(to, code);
         unchecked {
             ++totalMinted;
@@ -191,6 +175,7 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules {
         if (metadataFrozen) revert MetadataIsFrozen();
         baseURI = newBaseURI;
         emit BaseURIUpdated(newBaseURI);
+        emit BatchMetadataUpdate(1, type(uint256).max);
     }
 
     /// @notice Permanently lock one code's metadata.
@@ -281,13 +266,15 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules {
         );
         uint256 n = m.traits.length;
         for (uint256 i; i < n; ++i) {
-            out = string.concat(
-                out,
-                ',{"trait_type":"', _esc(m.traits[i].traitType),
-                '","value":"', _esc(m.traits[i].value), '"}'
-            );
+            out = string.concat(out, _traitJson(m.traits[i]));
         }
         out = string.concat(out, "]");
+    }
+
+    function _traitJson(Trait storage t) private view returns (string memory) {
+        return string.concat(
+            ',{"trait_type":"', _esc(t.traitType), '","value":"', _esc(t.value), '"}'
+        );
     }
 
     function _gradeName(Grade g) private pure returns (string memory) {
@@ -329,9 +316,11 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules {
     function supportsInterface(bytes4 id)
         public
         view
-        override(ERC721, AccessControlDefaultAdminRules)
+        override(ERC721, AccessControlDefaultAdminRules, IERC165)
         returns (bool)
     {
-        return id == bytes4(0x49064906) || super.supportsInterface(id);
+        return id == bytes4(0x49064906)
+            || id == type(IClueCode).interfaceId
+            || super.supportsInterface(id);
     }
 }

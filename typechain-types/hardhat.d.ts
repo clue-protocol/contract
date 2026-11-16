@@ -85,6 +85,10 @@ declare module "hardhat/types/runtime" {
       name: "ClueCode",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ClueCode__factory>;
+    getContractFactory(
+      name: "IClueCode",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IClueCode__factory>;
 
     getContractAt(
       name: "AccessControl",
@@ -176,6 +180,11 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.ClueCode>;
+    getContractAt(
+      name: "IClueCode",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IClueCode>;
 
     deployContract(
       name: "AccessControl",
@@ -249,6 +258,10 @@ declare module "hardhat/types/runtime" {
       name: "ClueCode",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ClueCode>;
+    deployContract(
+      name: "IClueCode",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IClueCode>;
 
     deployContract(
       name: "AccessControl",
@@ -340,6 +353,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ClueCode>;
+    deployContract(
+      name: "IClueCode",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IClueCode>;
 
     // default types
     getContractFactory(

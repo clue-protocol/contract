@@ -291,6 +291,25 @@
     "anonymous": false,
     "inputs": [
       {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_fromTokenId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_toTokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "BatchMetadataUpdate",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": true,
         "internalType": "uint256",
         "name": "code",
@@ -783,7 +802,7 @@
     "name": "gradeOf",
     "outputs": [
       {
-        "internalType": "enum ClueCode.Grade",
+        "internalType": "enum IClueCode.Grade",
         "name": "g",
         "type": "uint8"
       }
@@ -972,12 +991,12 @@
                 "type": "string"
               }
             ],
-            "internalType": "struct ClueCode.Trait[]",
+            "internalType": "struct IClueCode.Trait[]",
             "name": "traits",
             "type": "tuple[]"
           }
         ],
-        "internalType": "struct ClueCode.CodeMetadata",
+        "internalType": "struct IClueCode.CodeMetadata",
         "name": "",
         "type": "tuple"
       }
@@ -1068,12 +1087,12 @@
                 "type": "string"
               }
             ],
-            "internalType": "struct ClueCode.Trait[]",
+            "internalType": "struct IClueCode.Trait[]",
             "name": "traits",
             "type": "tuple[]"
           }
         ],
-        "internalType": "struct ClueCode.CodeMetadata",
+        "internalType": "struct IClueCode.CodeMetadata",
         "name": "md",
         "type": "tuple"
       }
@@ -1331,12 +1350,12 @@
                 "type": "string"
               }
             ],
-            "internalType": "struct ClueCode.Trait[]",
+            "internalType": "struct IClueCode.Trait[]",
             "name": "traits",
             "type": "tuple[]"
           }
         ],
-        "internalType": "struct ClueCode.CodeMetadata",
+        "internalType": "struct IClueCode.CodeMetadata",
         "name": "md",
         "type": "tuple"
       }
@@ -1388,12 +1407,12 @@
                 "type": "string"
               }
             ],
-            "internalType": "struct ClueCode.Trait[]",
+            "internalType": "struct IClueCode.Trait[]",
             "name": "traits",
             "type": "tuple[]"
           }
         ],
-        "internalType": "struct ClueCode.CodeMetadata[]",
+        "internalType": "struct IClueCode.CodeMetadata[]",
         "name": "mds",
         "type": "tuple[]"
       }

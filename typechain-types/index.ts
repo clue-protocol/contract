@@ -42,3 +42,5 @@ export type { Strings } from "./@openzeppelin/contracts/utils/Strings";
 export { Strings__factory } from "./factories/@openzeppelin/contracts/utils/Strings__factory";
 export type { ClueCode } from "./src/code/ClueCode";
 export { ClueCode__factory } from "./factories/src/code/ClueCode__factory";
+export type { IClueCode } from "./src/code/IClueCode";
+export { IClueCode__factory } from "./factories/src/code/IClueCode__factory";
