@@ -46,9 +46,7 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
         baseURI = initialURI;
     }
 
-    // ------------------------------------------------------------------
     // Grade and canonical form
-    // ------------------------------------------------------------------
 
     function _grade(uint256 c) private pure returns (Grade) {
         if (c >= 1 && c <= 99) return Grade.S;
@@ -77,9 +75,7 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
         return string(out);
     }
 
-    // ------------------------------------------------------------------
     // Minting (MINTER_ROLE only)
-    // ------------------------------------------------------------------
 
     /// @notice True if `code` has been minted.
     function isMinted(uint256 code) public view returns (bool) {
@@ -106,8 +102,6 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
     }
 
     function _mintCode(address to, uint256 code) private {
-        // 1. Must be a valid code number (S: 1-99, A: 100-999, B: 10000-99999).
-        //    Reverts with InvalidProviderCode(code) otherwise.
         gradeOf(code);
 
         // 2. Must not already be minted.
@@ -119,9 +113,7 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
         }
     }
 
-    // ------------------------------------------------------------------
     // Metadata storage (METADATA_ROLE only)
-    // ------------------------------------------------------------------
 
     function setMetadata(uint256 code, CodeMetadata calldata md)
         external
@@ -191,9 +183,7 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
         emit MetadataFrozen();
     }
 
-    // ------------------------------------------------------------------
     // Metadata reads
-    // ------------------------------------------------------------------
 
     /// @notice The metadata JSON for `code`, exactly as the contract builds it.
     function metadata(uint256 code) public view returns (string memory) {
@@ -222,9 +212,7 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
         );
     }
 
-    // ------------------------------------------------------------------
     // JSON builder
-    // ------------------------------------------------------------------
 
     function _json(uint256 code) private view returns (string memory) {
         Grade g = gradeOf(code);

@@ -17,6 +17,17 @@ const _abi = [
         type: "uint256",
       },
     ],
+    name: "CodeAlreadyMinted",
+    type: "error",
+  },
+  {
+    inputs: [
+      {
+        internalType: "uint256",
+        name: "code",
+        type: "uint256",
+      },
+    ],
     name: "CodeMetadataIsFrozen",
     type: "error",
   },

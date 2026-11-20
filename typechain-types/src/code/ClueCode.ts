@@ -83,6 +83,7 @@ export interface ClueCodeInterface extends Interface {
       | "hasMetadata"
       | "hasRole"
       | "isApprovedForAll"
+      | "isMinted"
       | "isValidCode"
       | "metadata"
       | "metadataFrozen"
@@ -231,6 +232,10 @@ export interface ClueCodeInterface extends Interface {
   encodeFunctionData(
     functionFragment: "isApprovedForAll",
     values: [AddressLike, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "isMinted",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "isValidCode",
@@ -399,6 +404,7 @@ export interface ClueCodeInterface extends Interface {
     functionFragment: "isApprovedForAll",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "isMinted", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "isValidCode",
     data: BytesLike
@@ -837,6 +843,8 @@ export interface ClueCode extends BaseContract {
     "view"
   >;
 
+  isMinted: TypedContractMethod<[code: BigNumberish], [boolean], "view">;
+
   isValidCode: TypedContractMethod<[code: BigNumberish], [boolean], "view">;
 
   metadata: TypedContractMethod<[code: BigNumberish], [string], "view">;
@@ -1048,6 +1056,9 @@ export interface ClueCode extends BaseContract {
     [boolean],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "isMinted"
+  ): TypedContractMethod<[code: BigNumberish], [boolean], "view">;
   getFunction(
     nameOrSignature: "isValidCode"
   ): TypedContractMethod<[code: BigNumberish], [boolean], "view">;

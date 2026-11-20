@@ -2,3 +2,4 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as code from "./code";
+export * as registry from "./registry";

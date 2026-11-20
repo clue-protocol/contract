@@ -3,3 +3,5 @@
 /* eslint-disable */
 import type * as code from "./code";
 export type { code };
+import type * as registry from "./registry";
+export type { registry };

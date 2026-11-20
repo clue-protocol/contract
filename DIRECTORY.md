@@ -1,6 +1,6 @@
 # Directory Structure: `.`
 
-> **Generated:** 2026-11-14 17:58:03 | **Directories:** 11 | **Files:** 21
+> **Generated:** 2026-11-19 23:41:11 | **Directories:** 11 | **Files:** 28
 
 ```txt
 contract/
@@ -22,6 +22,13 @@ contract/
 |       |       |---- IClueCode.sol
 |       |       |---- README.md
 |       |---- registry/
+|               |---- ClueCodeControl.sol
+|               |---- ClueCodeVault.sol
+|               |---- ClueMultiSig.sol
+|               |---- ClueProvider.sol
+|               |---- ClueRegistry.sol
+|               |---- ClueValidators.sol
+|               |---- Complete.txt
 |---- tests/
 |       |---- deploy/
 |       |---- code_deploy_test.go
