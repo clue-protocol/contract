@@ -1,13 +1,16 @@
 #!/usr/bin/env ts-node
 // ============================================================
-// Export ClueCode ABI + bytecode from Hardhat artifacts
+// Export a contract's ABI + bytecode from Hardhat artifacts
 // ============================================================
 import * as fs from "fs";
 import * as path from "path";
 
 const ROOT = path.resolve(__dirname, "..");
-const OUT_DIR = path.join(ROOT, "out");
-const CONTRACT_NAME = "ClueCode";
+// Overridable so the same exporter can serve the test Hardhat project.
+const OUT_DIR = process.env.EXPORT_OUT_DIR
+  ? path.resolve(process.env.EXPORT_OUT_DIR)
+  : path.join(ROOT, "out");
+const CONTRACT_NAME = process.env.CONTRACT_NAME || "ClueCode";
 
 // Optional override (used by Makefile: CLUECODE_ARTIFACT=...)
 const ARTIFACT_OVERRIDE = process.env.CLUECODE_ARTIFACT;
@@ -37,7 +40,7 @@ function findArtifact(): string {
 
   throw new Error(
     `Artifact not found for ${CONTRACT_NAME}. ` +
-    `Run 'make compile' first. Searched:\n  ` + candidates.join("\n  ")
+    `Run the relevant compile target first. Searched:\n  ` + candidates.join("\n  ")
   );
 }
 

@@ -5,6 +5,8 @@
 #   make init        – install npm dependencies, create out/ dirs
 #   make compile     – compile Solidity and export out/abi + out/bin
 #   make test        – run the Hardhat test suite
+#   make test-compile – compile test harnesses, emit Go bindings, then drop build output
+#   make test-bindings – export ABI/bin and generate Go bindings in tests/contracts/out
 #   make bindings    – generate Go bindings with abigen (out/go/code)
 #   make clean       – remove build artefacts
 #   make clean-all   – remove build artefacts + node_modules
@@ -12,7 +14,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init compile abi test bindings clean clean-abi clean-bin clean-bindings clean-all go
+.PHONY: help init compile abi test test-compile test-compile-clean test-bindings bindings clean clean-abi clean-bin clean-bindings clean-all go
 
 CONTRACT_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
@@ -25,6 +27,12 @@ HARDHAT_ENV := HARDHAT_DISABLE_TELEMETRY_PROMPT=true \
 
 OUT_DIR      := $(CONTRACT_DIR)/out
 CLUECODE_SRC := $(CONTRACT_DIR)/src/cluecode/ClueCode.sol
+TEST_HARDHAT_CONFIG := $(CONTRACT_DIR)/tests/contracts/hardhat.config.ts
+TEST_CONTRACTS      := ClueCodeVaultTest ClueValidatorsTest
+TEST_OUT_DIR        := $(CONTRACT_DIR)/tests/contracts/out
+TEST_GO_DIR         := $(TEST_OUT_DIR)/go
+TEST_GO_PKG         := testcontracts
+TEST_ARTIFACT_DIR   := $(CONTRACT_DIR)/tests/contracts/artifacts/tests/contracts/registry/src
 
 # abigen settings (Go package / type names for the generated binding)
 GO_DIR  := $(OUT_DIR)/go/code
@@ -77,6 +85,7 @@ bindings: compile ## Generate Go bindings with abigen (out/go/code)
 	       --out $(GO_DIR)/$(GO_TYPE).go
 	@echo "✓ Bindings written to out/go/code/$(GO_TYPE).go"
 
+
 # ── Test ─────────────────────────────────────────────────────
 
 test: ## Run the Hardhat test suite
@@ -109,5 +118,8 @@ clean-all: clean ## Remove build artefacts + node_modules
 
 refresh: ## Refresh the Project after Update
 	go mod tidy
-	drag  -exclude node_modules -exclude vendor -e artifacts -e cache -e typechain-types -c tests/deploy .
+	drag  -exclude node_modules -exclude vendor -e artifacts -e cache -e typechain-types \
+	      -exclude tests/contracts/artifacts -exclude tests/contracts/cache \
+	      -exclude tests/contracts/typechain-types -exclude tests/contracts/out \
+	      -c tests/deploy -c tests/contracts/registry/test/depoly .
 	@echo "Refresh Done ✓ " 

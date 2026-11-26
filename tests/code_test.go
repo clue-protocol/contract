@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v6"
 	cluecode "github.com/clue-protocol/contract/out/go/code"
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -24,7 +26,358 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pat3icki/pkgt/envt"
+	"github.com/stretchr/testify/require"
 )
+
+// ======================================================================
+// Deploy test (separate DEPLOY_* config)
+// ======================================================================
+
+// Grade B code range used for random mint tests. Adjust to match the
+// contract's valid code ranges (MAX_SUPPLY is 90_999).
+const (
+	minTestCode = 10000
+	maxTestCode = 90998
+	maxSupply   = 90_999
+
+	// maxCodesPerTx keeps each MintBatch transaction safely under block gas limits.
+	maxCodesPerTx = 100
+)
+
+// randomCodes returns n unique random codes in [minTestCode, maxTestCode].
+// n must not exceed the size of that range or this would never terminate;
+// loadDeployConfig validates DEPLOY_MINT_COUNT against it.
+func randomCodes(n int) []*big.Int {
+	seen := make(map[int]struct{}, n)
+	codes := make([]*big.Int, 0, n)
+	for len(codes) < n {
+		c := gofakeit.Number(minTestCode, maxTestCode)
+		if _, dup := seen[c]; dup {
+			continue
+		}
+		seen[c] = struct{}{}
+		codes = append(codes, big.NewInt(int64(c)))
+	}
+	return codes
+}
+
+// DeployConfig holds the parameters of TestDeploy only.
+type DeployConfig struct {
+	Env        map[string]string
+	RPCURL     string
+	ChainID    *big.Int
+	Key        *ecdsa.PrivateKey
+	Admin      common.Address
+	Minter     common.Address
+	AdminDelay *big.Int
+	InitialURI string
+	OutFile    string
+	TxTimeout  time.Duration
+	MintBatch  bool // when true, TestDeploy exercises MintBatch after deployment
+	MintCount  int  // 0 = not set, so a random 2-5 codes are minted
+}
+
+// loadDeployConfig returns (nil, "", nil) when DEPLOY_RPC_URL is not set.
+func loadDeployConfig() (*DeployConfig, string, error) {
+	env, err := envt.Map(&envt.Config{
+		EnvPath:  "tests/.env",
+		PanicErr: false,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	c := &DeployConfig{Env: env}
+
+	rpc := c.Env["DEPLOY_RPC_URL"]
+	if rpc == "" {
+		return nil, "", nil
+	}
+	c.RPCURL = rpc
+	c.AdminDelay = big.NewInt(86400)
+
+	gofakeit.Seed(0) // 0 = random seed, so each run produces different values
+	uuid := gofakeit.UUID()
+
+	if s := c.Env["DEPLOY_INITIAL_URI"]; s != "" {
+		c.InitialURI = s
+	} else {
+		c.InitialURI = fmt.Sprintf("%s/%s/", strings.TrimRight(gofakeit.URL(), "/"), uuid)
+	}
+
+	if s := c.Env["DEPLOY_OUT_FILE"]; s != "" {
+		c.OutFile = s
+	} else {
+		c.OutFile = fmt.Sprintf("out_%s.json", strings.Split(uuid, "-")[0])
+	}
+	c.TxTimeout = 180 * time.Second
+
+	id, ok := new(big.Int).SetString(c.Env["DEPLOY_CHAIN_ID"], 10)
+	if !ok {
+		return nil, "", fmt.Errorf("DEPLOY_CHAIN_ID is required and must be a decimal integer")
+	}
+	c.ChainID = id
+
+	if c.Env["DEPLOY_PRIVATE_KEY"] == "" {
+		return nil, "", fmt.Errorf("DEPLOY_PRIVATE_KEY is required")
+	}
+	k, err := parseKey(c.Env["DEPLOY_PRIVATE_KEY"])
+	if err != nil {
+		return nil, "", fmt.Errorf("DEPLOY_PRIVATE_KEY: %w", err)
+	}
+	c.Key = k
+
+	deployer := addrOf(k)
+	c.Admin, c.Minter = deployer, deployer
+	for envKey, dst := range map[string]*common.Address{
+		"DEPLOY_ADMIN":  &c.Admin,
+		"DEPLOY_MINTER": &c.Minter,
+	} {
+		if s := c.Env[envKey]; s != "" {
+			if !common.IsHexAddress(s) {
+				return nil, "", fmt.Errorf("%s %q is not a valid address", envKey, s)
+			}
+			*dst = common.HexToAddress(s)
+		}
+	}
+	if c.Admin == (common.Address{}) {
+		return nil, "", fmt.Errorf("DEPLOY_ADMIN must not be the zero address")
+	}
+	if s := c.Env["DEPLOY_ADMIN_DELAY"]; s != "" {
+		d, ok := new(big.Int).SetString(s, 10)
+		if !ok || d.Sign() < 0 || d.BitLen() > 48 {
+			return nil, "", fmt.Errorf("DEPLOY_ADMIN_DELAY %q must be an integer in [0, 2^48)", s)
+		}
+		c.AdminDelay = d
+	}
+	if s := c.Env["DEPLOY_TX_TIMEOUT"]; s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil || n <= 0 {
+			return nil, "", fmt.Errorf("DEPLOY_TX_TIMEOUT %q must be a positive number of seconds", s)
+		}
+		c.TxTimeout = time.Duration(n) * time.Second
+	}
+	if s := c.Env["DEPLOY_MINT_BATCH"]; s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, "", fmt.Errorf("DEPLOY_MINT_BATCH %q must be a boolean (true/false)", s)
+		}
+		c.MintBatch = b
+	}
+	// Optional. Unset or empty leaves MintCount at 0, which means "random 2-5".
+	if s := strings.TrimSpace(c.Env["DEPLOY_MINT_COUNT"]); s != "" {
+		n, err := strconv.Atoi(s)
+		maxCount := maxTestCode - minTestCode + 1
+		if err != nil || n <= 0 || n > maxCount {
+			return nil, "", fmt.Errorf("DEPLOY_MINT_COUNT %q must be an integer in [1, %d]", s, maxCount)
+		}
+		c.MintCount = n
+	}
+	return c, uuid, nil
+}
+
+func TestDeploy(t *testing.T) {
+	dc, uuid, err := loadDeployConfig()
+	require.NoError(t, err, "deploy configuration error")
+	if dc == nil {
+		t.Skip("DEPLOY_RPC_URL not set; see tests/.env.example")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), dc.TxTimeout)
+	defer cancel()
+
+	cl, err := ethclient.DialContext(ctx, dc.RPCURL)
+	require.NoError(t, err, "dial %s", dc.RPCURL)
+	defer cl.Close()
+
+	remote, err := cl.ChainID(ctx)
+	require.NoError(t, err, "fetch chain id")
+	require.Zero(t, remote.Cmp(dc.ChainID),
+		"DEPLOY_CHAIN_ID=%s but the endpoint reports chain id %s", dc.ChainID, remote)
+
+	deployer := addrOf(dc.Key)
+	bal, err := cl.BalanceAt(ctx, deployer, nil)
+	require.NoError(t, err, "balance")
+	require.NotZero(t, bal.Sign(), "deployer %s has no funds on chain %s", deployer, dc.ChainID)
+
+	t.Logf("deploying from %s on chain %s (admin %s, minter %s, delay %ss, uri %s)",
+		deployer, dc.ChainID, dc.Admin, dc.Minter, dc.AdminDelay, dc.InitialURI)
+
+	auth, err := bind.NewKeyedTransactorWithChainID(dc.Key, dc.ChainID)
+	require.NoError(t, err)
+	auth.Context = ctx
+
+	address, tx, instance, err := cluecode.DeployClueCode(auth, cl, dc.Admin, dc.AdminDelay, dc.Minter, dc.InitialURI)
+	require.NoError(t, err, "DeployClueCode")
+
+	receipt, err := bind.WaitMined(ctx, cl, tx)
+	require.NoError(t, err, "wait for deployment %s", tx.Hash())
+	require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "deployment %s reverted", tx.Hash())
+	require.Equal(t, address, receipt.ContractAddress, "receipt address != returned address")
+	t.Logf("ClueCode deployed at %s (tx %s, block %s, gas %d)",
+		address, tx.Hash(), receipt.BlockNumber, receipt.GasUsed)
+
+	verifyDeployment(t, dc, instance)
+
+	// --- Optionally exercise mintBatch immediately after deployment ---
+	var codesToMint []*big.Int
+	if dc.MintBatch {
+		codesToMint = testMintBatch(t, cl, dc, instance, deployer)
+	} else {
+		if dc.MintCount > 0 {
+			t.Logf("DEPLOY_MINT_COUNT=%d ignored because DEPLOY_MINT_BATCH is not enabled", dc.MintCount)
+		}
+		t.Log("DEPLOY_MINT_BATCH not enabled; skipping mintBatch")
+	}
+
+	// Print the address in a form that can be pasted into the shell for the rest of the suite.
+	fmt.Printf("\nexport CLUE_RPC_URL=%s\nexport CLUE_CHAIN_ID=%s\nexport CLUE_CONTRACT_ADDRESS=%s\n",
+		dc.RPCURL, dc.ChainID, address)
+
+	if dc.OutFile != "" {
+		result := map[string]interface{}{
+			"chainId":          dc.ChainID.String(),
+			"rpc":              dc.RPCURL,
+			"contract address": address.Hex(),
+			// "address" is the key loadConfig reads (deployRecord.Address).
+			"address":       address.Hex(),
+			"transactionId": tx.Hash().Hex(),
+			"txHash":        tx.Hash().Hex(),
+			"block":         receipt.BlockNumber.String(),
+			"admin":         dc.Admin.Hex(),
+			"minter":        dc.Minter.Hex(),
+			"adminDelay":    dc.AdminDelay.String(),
+			"initialURI":    dc.InitialURI,
+			"mintBatch":     dc.MintBatch,
+			"mintedCount":   len(codesToMint),
+			"uuid":          uuid,
+			// NOTE: this writes a private key to disk. Keep tests/deploy/ out of git.
+			"admin key": hexutil.Encode(crypto.FromECDSA(dc.Key)),
+		}
+		if dc.MintBatch {
+			result["mintedCodes"] = codesToMint
+		}
+		out, err := json.MarshalIndent(result, "", "  ")
+		require.NoError(t, err, "marshal deploy output")
+		require.NoError(t, envt.WriteFile(filepath.Join("tests", "deploy", dc.OutFile), out, 0o644),
+			"write %s", dc.OutFile)
+		t.Logf("wrote %s", dc.OutFile)
+	}
+}
+
+// verifyDeployment checks that the constructor arguments took effect.
+func verifyDeployment(t *testing.T, dc *DeployConfig, instance *cluecode.ClueCode) {
+	t.Helper()
+
+	name, err := instance.Name(nil)
+	require.NoError(t, err)
+	require.Equal(t, "Clue Provider Code", name)
+
+	symbol, err := instance.Symbol(nil)
+	require.NoError(t, err)
+	require.Equal(t, "CPC", symbol)
+
+	supply, err := instance.MAXSUPPLY(nil)
+	require.NoError(t, err)
+	require.Zero(t, supply.Cmp(big.NewInt(maxSupply)), "MAX_SUPPLY = %v", supply)
+
+	minted, err := instance.TotalMinted(nil)
+	require.NoError(t, err)
+	require.Zero(t, minted.Sign(), "totalMinted = %v; want 0", minted)
+
+	admin, err := instance.DefaultAdmin(nil)
+	require.NoError(t, err)
+	require.Equal(t, dc.Admin, admin)
+
+	delay, err := instance.DefaultAdminDelay(nil)
+	require.NoError(t, err)
+	require.Zero(t, delay.Cmp(dc.AdminDelay), "defaultAdminDelay = %v; want %s", delay, dc.AdminDelay)
+
+	minterRole, err := instance.MINTERROLE(nil)
+	require.NoError(t, err)
+
+	ok, err := instance.HasRole(nil, minterRole, dc.Minter)
+	require.NoError(t, err)
+	require.True(t, ok, "minter %s should hold MINTER_ROLE", dc.Minter)
+
+	ok, err = instance.HasRole(nil, [32]byte{}, dc.Admin)
+	require.NoError(t, err)
+	require.True(t, ok, "admin %s should hold DEFAULT_ADMIN_ROLE", dc.Admin)
+
+	if dc.Minter != dc.Admin {
+		ok, err = instance.HasRole(nil, minterRole, dc.Admin)
+		require.NoError(t, err)
+		require.False(t, ok, "admin unexpectedly holds MINTER_ROLE")
+	}
+}
+
+// testMintBatch mints a batch to the deployer and verifies the result.
+// The batch size is DEPLOY_MINT_COUNT when set, otherwise a random 2-5.
+// Large counts are split into chunks of maxCodesPerTx per transaction.
+// It returns the codes that were minted.
+func testMintBatch(
+	t *testing.T,
+	cl *ethclient.Client,
+	dc *DeployConfig,
+	instance *cluecode.ClueCode,
+	deployer common.Address,
+) []*big.Int {
+	t.Helper()
+	t.Log("exercising mintBatch post-deployment")
+
+	// DEPLOY_MINT_COUNT if provided, otherwise the original random 2-5.
+	batchSize := dc.MintCount
+	if batchSize == 0 {
+		batchSize = gofakeit.Number(2, 5)
+		t.Logf("DEPLOY_MINT_COUNT not set; using random batch size %d", batchSize)
+	}
+
+	// Each chunk is its own transaction, so scale the timeout with the chunk
+	// count instead of sharing the single deployment timeout.
+	chunks := (batchSize + maxCodesPerTx - 1) / maxCodesPerTx
+	ctx, cancel := context.WithTimeout(context.Background(), dc.TxTimeout*time.Duration(chunks))
+	defer cancel()
+
+	// The deployer is also the minter by default in this test setup.
+	mintAuth, err := bind.NewKeyedTransactorWithChainID(dc.Key, dc.ChainID)
+	require.NoError(t, err, "create transactor for mintBatch")
+	mintAuth.Context = ctx
+
+	codesToMint := randomCodes(batchSize)
+	require.Len(t, codesToMint, batchSize)
+	t.Logf("minting %d codes in %d transaction(s)", batchSize, chunks)
+
+	for start := 0; start < len(codesToMint); start += maxCodesPerTx {
+		end := start + maxCodesPerTx
+		if end > len(codesToMint) {
+			end = len(codesToMint)
+		}
+		chunk := codesToMint[start:end]
+
+		txMint, err := instance.MintBatch(mintAuth, deployer, chunk)
+		require.NoError(t, err, "MintBatch [%d:%d]", start, end)
+
+		receiptMint, err := bind.WaitMined(ctx, cl, txMint)
+		require.NoError(t, err, "wait for MintBatch tx %s", txMint.Hash())
+		require.Equal(t, types.ReceiptStatusSuccessful, receiptMint.Status,
+			"MintBatch tx %s reverted", txMint.Hash())
+		t.Logf("minted chunk [%d:%d] (tx %s, gas %d)", start, end, txMint.Hash(), receiptMint.GasUsed)
+	}
+
+	// Assumes a fresh deployment, which is the case in TestDeploy.
+	totalMinted, err := instance.TotalMinted(nil)
+	require.NoError(t, err, "TotalMinted")
+	require.Zero(t, totalMinted.Cmp(big.NewInt(int64(batchSize))),
+		"expected totalMinted=%d, got %v", batchSize, totalMinted)
+
+	for _, code := range codesToMint {
+		owner, err := instance.OwnerOf(nil, code)
+		require.NoError(t, err, "OwnerOf(%v)", code)
+		require.Equal(t, deployer, owner, "owner of code %v", code)
+	}
+
+	t.Logf("Successfully minted batch of %d codes to %s", batchSize, deployer)
+	return codesToMint
+}
 
 // ======================================================================
 // Global configuration (all tests except TestDeploy)
@@ -755,4 +1108,166 @@ func TestMintBatch(t *testing.T) {
 	if err != nil || new(big.Int).Sub(after, before).Int64() != 3 {
 		t.Fatalf("totalMinted %v -> %v, want +3 (err %v)", before, after, err)
 	}
+}
+
+// ======================================================================
+// Additional state-changing tests: transfer to a fresh wallet, safe
+// transfer, and blanket approve-all
+// ======================================================================
+
+// newWallet generates a fresh ECDSA keypair and returns both the key and
+// its derived address. Used when a test needs to actually sign as the new
+// wallet (receiving alone only needs the address).
+func newWallet(t *testing.T) (*ecdsa.PrivateKey, common.Address) {
+	t.Helper()
+	k, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k, addrOf(k)
+}
+
+// TestTransferToNewWallet mints a code to the default signer, creates a
+// brand-new wallet, transfers the code to that crypto address, and then has
+// the new wallet itself transfer the code again to prove it really controls
+// the token. Finally it checks the original owner can no longer move it.
+func TestTransferToNewWallet(t *testing.T) {
+	requireMinter(t)
+	owner := addrOf(cfg.Key)
+	minterAuth := txOpts(t, cfg.MinterKey)
+
+	code := freeCodes(t, 1)[0]
+	id := bigInt(code)
+
+	tx, err := cc.Mint(minterAuth, owner, id)
+	mine(t, tx, err)
+	if o, err := cc.OwnerOf(nil, id); err != nil || o != owner {
+		t.Fatalf("pre-transfer ownerOf(%d) = %s, err %v; want %s", code, o, err, owner)
+	}
+
+	// Fresh wallet — this is the new crypto address the code is sent to.
+	newKey, newAddr := newWallet(t)
+	t.Logf("created new wallet %s", newAddr)
+	if newAddr == (common.Address{}) {
+		t.Fatal("generated wallet has zero address")
+	}
+
+	// Send the token from the current owner to the new wallet.
+	ownerAuth := txOpts(t, cfg.Key)
+	tx, err = cc.TransferFrom(ownerAuth, owner, newAddr, id)
+	mine(t, tx, err)
+
+	if o, err := cc.OwnerOf(nil, id); err != nil || o != newAddr {
+		t.Fatalf("after transfer ownerOf(%d) = %s, err %v; want %s", code, o, err, newAddr)
+	}
+	if b, err := cc.BalanceOf(nil, newAddr); err != nil || b.Int64() != 1 {
+		t.Fatalf("balanceOf(newWallet) = %v, err %v; want 1", b, err)
+	}
+	// ERC-721 clears the per-token approval on transfer.
+	if a, err := cc.GetApproved(nil, id); err != nil || a != (common.Address{}) {
+		t.Fatalf("getApproved after transfer = %s, err %v; want zero", a, err)
+	}
+
+	// The new wallet is now the only one allowed to move it.
+	finalAddr := randomAddress(t)
+	newAuth := txOpts(t, newKey)
+	tx, err = cc.TransferFrom(newAuth, newAddr, finalAddr, id)
+	mine(t, tx, err)
+	if o, err := cc.OwnerOf(nil, id); err != nil || o != finalAddr {
+		t.Fatalf("after second transfer ownerOf(%d) = %s, err %v; want %s", code, o, err, finalAddr)
+	}
+
+	// The original owner must be locked out of the token now.
+	_, err = cc.TransferFrom(ownerAuth, owner, finalAddr, id)
+	requireRevert(t, err, "ERC721InsufficientApproval")
+}
+
+// TestSafeTransferFrom exercises the safeTransferFrom overload against a
+// plain EOA recipient (no receiver hook). It must behave like transferFrom.
+func TestSafeTransferFrom(t *testing.T) {
+	requireMinter(t)
+	owner := addrOf(cfg.Key)
+	minterAuth := txOpts(t, cfg.MinterKey)
+
+	code := freeCodes(t, 1)[0]
+	id := bigInt(code)
+
+	tx, err := cc.Mint(minterAuth, owner, id)
+	mine(t, tx, err)
+
+	recipient := randomAddress(t)
+	ownerAuth := txOpts(t, cfg.Key)
+	tx, err = cc.SafeTransferFrom(ownerAuth, owner, recipient, id)
+	mine(t, tx, err)
+
+	if o, err := cc.OwnerOf(nil, id); err != nil || o != recipient {
+		t.Fatalf("after safeTransferFrom ownerOf(%d) = %s, err %v; want %s", code, o, err, recipient)
+	}
+}
+
+// TestApproveAll grants setApprovalForAll to a freshly generated operator
+// wallet, checks isApprovedForAll, verifies the operator can move every
+// token owned by the approver, then revokes and confirms the operator is
+// blocked from further transfers.
+func TestApproveAll(t *testing.T) {
+	requireMinter(t)
+	owner := addrOf(cfg.Key)
+	minterAuth := txOpts(t, cfg.MinterKey)
+
+	// Mint a couple of codes to the default signer so approve-all has
+	// more than one token to exercise.
+	codes := freeCodes(t, 2)
+	ids := make([]*big.Int, len(codes))
+	for i, c := range codes {
+		ids[i] = bigInt(c)
+		tx, err := cc.Mint(minterAuth, owner, ids[i])
+		mine(t, tx, err)
+	}
+
+	operatorKey, operator := newWallet(t)
+	t.Logf("operator wallet %s", operator)
+
+	// Not approved yet.
+	if ok, err := cc.IsApprovedForAll(nil, owner, operator); err != nil || ok {
+		t.Fatalf("isApprovedForAll before = %v, err %v; want false", ok, err)
+	}
+
+	// Without approval the operator cannot move the token.
+	opAuth := txOpts(t, operatorKey)
+	_, err := cc.TransferFrom(opAuth, owner, operator, ids[0])
+	requireRevert(t, err, "ERC721InsufficientApproval")
+
+	// Grant blanket approval.
+	ownerAuth := txOpts(t, cfg.Key)
+	tx, err := cc.SetApprovalForAll(ownerAuth, operator, true)
+	mine(t, tx, err)
+	if ok, err := cc.IsApprovedForAll(nil, owner, operator); err != nil || !ok {
+		t.Fatalf("isApprovedForAll after = %v, err %v; want true", ok, err)
+	}
+
+	// Operator can now move every token owned by the approver.
+	for _, id := range ids {
+		tx, err := cc.TransferFrom(opAuth, owner, operator, id)
+		mine(t, tx, err)
+		if o, err := cc.OwnerOf(nil, id); err != nil || o != operator {
+			t.Fatalf("ownerOf(%v) after operator transfer = %s, err %v; want %s", id, o, err, operator)
+		}
+	}
+
+	// Revoke the approval; the operator must be blocked again.
+	tx, err = cc.SetApprovalForAll(ownerAuth, operator, false)
+	mine(t, tx, err)
+	if ok, err := cc.IsApprovedForAll(nil, owner, operator); err != nil || ok {
+		t.Fatalf("isApprovedForAll after revoke = %v, err %v; want false", ok, err)
+	}
+
+	// Move the tokens back to the owner so we can attempt another operator
+	// transfer while the operator is definitely unapproved.
+	for _, id := range ids {
+		tx, err := cc.TransferFrom(ownerAuth, operator, owner, id)
+		mine(t, tx, err)
+	}
+
+	_, err = cc.TransferFrom(opAuth, owner, operator, ids[0])
+	requireRevert(t, err, "ERC721InsufficientApproval")
 }

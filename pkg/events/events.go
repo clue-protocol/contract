@@ -1,24 +1,3 @@
-// Package events watches the event logs emitted by an EVM contract and
-// dispatches them to a caller supplied handler.
-//
-// A Watcher has three main entry points:
-//
-//   - New builds a watcher from a Config (endpoint / client, contract address,
-//     topic filters and a handler).
-//   - Event is the dispatch hook. Start calls it for every log that matches
-//     the filter; callers may also call it directly (useful in tests).
-//   - Start runs the watcher until its context is canceled or Close is called.
-//
-// Status reports the current state, Config/DefaultConfig hold the settings and
-// Logger (Printf + Error) is a small interface so any logging package can be plugged in.
-// Handlers run sequentially by default; Config.Concurrency enables a bounded
-// worker pool, and Config.HandlerTimeout bounds a slow handler.
-//
-// Websocket (and IPC) endpoints use eth_subscribe for real time delivery.
-// HTTP endpoints are polled with eth_getLogs. In both modes a failed call is
-// retried with exponential backoff until cancellation. Delivery is
-// at-least-once: a reconnect can replay a log, so handlers should be
-// idempotent.
 package events
 
 import (

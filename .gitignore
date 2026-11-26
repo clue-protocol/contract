@@ -2,4 +2,10 @@ node_modules/
 vendor
 tests/.env
 tests/deploy
+tests/contracts/artifacts/
+tests/contracts/cache/
+tests/contracts/typechain-types/
+tests/contracts/out/
+tests/contracts/registry/test/depoly/*
+!tests/contracts/registry/test/depoly/.gitkeep
 contract/artifacts/build-info
