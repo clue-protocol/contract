@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ClueCodeOrganisation} from "./ClueCodeOrganisation.sol";
+import {ClueOrgRoles} from "../code/IClueProviderCode.sol";
+import {ClueCodeOrgRef} from "./ClueCodeOrgRef.sol";
 
 /// @title ClueProvider
 /// @notice Stores the *specification* of each vaulted Provider Code: what the code is, not what
@@ -18,18 +19,18 @@ import {ClueCodeOrganisation} from "./ClueCodeOrganisation.sol";
 ///           - createdAt
 ///           - grade ceilings D and R   pure functions of grade   (Section 3.5.1)
 ///
-///         NOT STORED HERE (live / active state, belongs to ClueCodeOrganisation and the registry)
+///         NOT STORED HERE (live / active state lives in ClueCode, the registry only holds a reference)
 ///           - Ed25519 public key / Profile Server key -> Organisation
-///           - code status (Open / Stateless / Active)  -> ClueCodeOrganisation.code_status
-///           - code -> organisation, roles, initiator   -> ClueCodeOrganisation
+///           - code status (Open / Stateless / Active)  -> ClueCode
+///           - code -> organisation, roles, initiator   -> ClueCode
 ///           - links (routeCode, staticCode, D, R_link), partitions, domain intervals,
 ///             allocLimit, live occupancy counts, Σ R_link
 ///           - version, SMT / Name SMT positions, commits, Counter, Controller
 ///
-///         Mapping to ClueCodeOrganisation: specs are keyed by the same `uint32 code`, a spec can
-///         only be written while `_codeOrg[code] != 0` (the code is vaulted), and writes are gated
+///         Mapping to ClueCode: specs are keyed by the same `uint32 code`, a spec can
+///         only be written while `_codeOrg(code) != 0` (the code is vaulted), and writes are gated
 ///         by that organisation's roles.
-abstract contract ClueProvider is ClueCodeOrganisation {
+abstract contract ClueProvider is ClueCodeOrgRef {
     // ---------------------------------------------------------------------
     // Types (values match the pack enumerations in Section 9.1.7)
     // ---------------------------------------------------------------------
@@ -199,7 +200,7 @@ abstract contract ClueProvider is ClueCodeOrganisation {
         delete _codeByName[keccak256(bytes(spec.name))];
         delete _providers[code];
 
-        emit ProviderCleared(code, _codeOrg[code]);
+        emit ProviderCleared(code, _codeOrg(code));
     }
 
     /// @dev Clears provider spec on code release.
@@ -299,11 +300,11 @@ abstract contract ClueProvider is ClueCodeOrganisation {
 
     /// @dev Code must be vaulted; caller must be admin or controller of the vaulting organisation.
     function _requireProviderAuth(uint32 code) internal view returns (uint256 orgId) {
-        orgId = _codeOrg[code];
+        orgId = _codeOrg(code);
         if (orgId == 0) revert CodeNotVaulted(code);
         if (
-            !hasOrgRole(orgId, ORG_ADMIN_ROLE, msg.sender) &&
-            !hasOrgRole(orgId, ORG_CONTROLLER_ROLE, msg.sender)
+            !_clueCode.hasOrgRole(orgId, ClueOrgRoles.ORG_ADMIN_ROLE, msg.sender)
+                && !_clueCode.hasOrgRole(orgId, ClueOrgRoles.ORG_CONTROLLER_ROLE, msg.sender)
         ) {
             revert NotProviderAuthorised(orgId, msg.sender);
         }

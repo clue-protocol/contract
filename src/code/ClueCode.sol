@@ -5,8 +5,13 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {AccessControlDefaultAdminRules} from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
-import {IClueCode} from "./IClueCode.sol";
+import {IClueProviderCode} from "./IClueProviderCode.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {ClueCodeOrganisation} from "./ClueCodeOrganisation.sol";
+import {ClueConstrict} from "../zlibs/constrict/ClueConstrict.sol";
+
+import {IClueRegistry} from "../registry/IClueRegistry.sol";
+
 /**
  * @title ClueCode
  * @notice ERC-721 representing ownership of a Provider Code of the Clue Protocol.
@@ -18,9 +23,21 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
  *  - A code with no stored metadata falls back to baseURI + canonical code
  *    (if baseURI is set), otherwise to a default on-chain JSON.
  *
+ * Organisation / vault model
+ *  - Organisation, role and code-vault state live in {ClueCodeOrganisation}, inherited
+ *    below, so there is a single source of truth. The trusted registry holds a typed
+ *    reference and drives the state-changing functions on behalf of users, forwarding
+ *    the original caller explicitly.
+ *
  * NOTE: reference implementation, not audited.
  */
-contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
+contract ClueCode is
+    ERC721,
+    AccessControlDefaultAdminRules,
+    IClueProviderCode,
+    ClueCodeOrganisation,
+    ClueConstrict
+{
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant METADATA_ROLE = keccak256("METADATA_ROLE");
     uint256 public constant MAX_SUPPLY = 90_999;
@@ -44,6 +61,9 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
         _grantRole(MINTER_ROLE, minter);
         _grantRole(METADATA_ROLE, admin);
         baseURI = initialURI;
+
+        // Constrict roles are granted by the admin on this interface id.
+        registerContractInterface("IClueRegistry", type(IClueRegistry).interfaceId);
     }
 
     // Grade and canonical form
@@ -112,6 +132,24 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
             ++totalMinted;
         }
     }
+    // Set Code Status
+
+    /// @notice Sets `code` status from a sibling contract granted the constrict role.
+    /// @dev The caller must have `type(IClueProviderCode).interfaceId` via {ClueConstrict}.
+    function setProviderCodeStatus(uint32 code, CodeStatus newStatus)
+        external
+        hasConstrictRole(type(IClueRegistry).interfaceId, msg.sender)
+    {
+        _setCodeStatus(code, newStatus);
+    }
+
+    /// @notice Grants `account` the constrict role for a registered interface. Admin only.
+    function grantConstrictRole(bytes4 interfaceId, address account)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        grantConstrict(interfaceId, account);
+    }
 
     // Metadata storage (METADATA_ROLE only)
 
@@ -167,7 +205,7 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
         if (metadataFrozen) revert MetadataIsFrozen();
         baseURI = newBaseURI;
         emit BaseURIUpdated(newBaseURI);
-        emit BatchMetadataUpdate(1, type(uint256).max);
+        emit BatchMetadataUpdate(1, MAX_SUPPLY);
     }
 
     /// @notice Permanently lock one code's metadata.
@@ -298,6 +336,22 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
     }
 
     // ------------------------------------------------------------------
+    // Hooks for {ClueCodeOrganisation}
+    // ------------------------------------------------------------------
+
+    function _checkDefaultAdminRole() internal view override {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
+    function _codeOwner(uint256 code) internal view override returns (address) {
+        return ownerOf(code);
+    }
+
+    function _transferCode(address from, address to, uint256 code) internal override {
+        _transfer(from, to, code);
+    }
+
+    // ------------------------------------------------------------------
     // ERC-165 (includes ERC-4906)
     // ------------------------------------------------------------------
 
@@ -308,7 +362,7 @@ contract ClueCode is ERC721, AccessControlDefaultAdminRules, IClueCode {
         returns (bool)
     {
         return id == bytes4(0x49064906)
-            || id == type(IClueCode).interfaceId
+            || id == type(IClueProviderCode).interfaceId
             || super.supportsInterface(id);
     }
 }

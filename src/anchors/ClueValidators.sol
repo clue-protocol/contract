@@ -2,7 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {ClueCodeOrganisation} from "./ClueCodeOrganisation.sol";
+import {ClueOrgRoles} from "../code/IClueProviderCode.sol";
+import {ClueCodeOrgRef} from "./ClueCodeOrgRef.sol";
 
 /**
  * @title ClueValidators
@@ -20,7 +21,7 @@ import {ClueCodeOrganisation} from "./ClueCodeOrganisation.sol";
  *      The separate contract-level `Authorizer` (set at deployment) has no say in
  *      linking: it can only delete validators via {resolveValidator}.
  */
-abstract contract ClueValidators is ClueCodeOrganisation {
+abstract contract ClueValidators is ClueCodeOrgRef {
     using EnumerableSet for EnumerableSet.UintSet;
 
     // Constants
@@ -103,7 +104,7 @@ abstract contract ClueValidators is ClueCodeOrganisation {
     error CodeValidatorAlreadyAdded(uint32 code, uint256 validatorId);
     error CodeValidatorNotFound(uint32 code, uint256 validatorId);
     error NotValidatorAccount(uint256 validatorId, address caller);
-    // CodeNotVaulted is inherited from {ClueCodeOrganisation}.
+    // CodeNotVaulted and MissingOrgRole are inherited from {ClueCodeOrgRef}.
     error InvalidLinkMessage();
     error ValidatorLinkAlreadyRequested(uint32 code, uint256 validatorId);
     error ValidatorLinkRequestNotFound(uint32 code, uint256 validatorId);
@@ -244,7 +245,7 @@ abstract contract ClueValidators is ClueCodeOrganisation {
     /// @param validatorId Validator the request is addressed to.
     /// @param message     Short note for the Validator Authorizer, max 256 bytes.
     function requestValidatorLink(uint32 code, uint256 validatorId, string calldata message) external {
-        _checkCodeRole(code, ORG_CONTROLLER_ROLE);
+        _checkCodeRole(code, ClueOrgRoles.ORG_CONTROLLER_ROLE);
         _requestValidatorLink(code, validatorId, message);
     }
 
@@ -266,8 +267,9 @@ abstract contract ClueValidators is ClueCodeOrganisation {
     ///      for the organisation that owns `code`. Either side may revoke a link,
     ///      without needing the other side's approval.
     function unlinkValidator(uint32 code, uint256 validatorId) external {
-        uint256 orgId = _codeOrg[code];
-        bool isOrgController = orgId != 0 && hasOrgRole(orgId, ORG_CONTROLLER_ROLE, msg.sender);
+        uint256 orgId = _codeOrg(code);
+        bool isOrgController =
+            orgId != 0 && _clueCode.hasOrgRole(orgId, ClueOrgRoles.ORG_CONTROLLER_ROLE, msg.sender);
         if (!isOrgController && _validatorIdByAccount[msg.sender] != validatorId) {
             revert NotValidatorAccount(validatorId, msg.sender);
         }
@@ -378,14 +380,6 @@ abstract contract ClueValidators is ClueCodeOrganisation {
         }
 
         super._cleanupCodeOnRelease(code, orgId);
-    }
-
-    /// @dev Checks if the caller has `role` for the organisation associated with `code`.
-    ///      Reverts if the code is not vaulted (i.e., not mapped to a valid organisation).
-    function _checkCodeRole(uint32 code, bytes32 role) internal view {
-        uint256 orgId = _codeOrg[code];
-        if (orgId == 0) revert CodeNotVaulted(code);
-        _checkRole(orgId, role);
     }
 
     /// @dev Name must be 3 to 32 bytes, start with a letter, and use only

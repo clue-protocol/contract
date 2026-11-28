@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {ClueAuthorizer} from "../zlibs/authorizers/ClueAuthorizer.sol";
+
 /**
  * @title ClueAccounts
- * @notice ClueRegistry component that records which account leaf hashes have been
- *         registered into the Clue Protocol and checks that a leaf, or a list of leaves, is
- *         valid: registered, and a member of the Sparse Merkle Tree (SMT) with a given root.
+ * @notice Standalone contract that records which account leaf hashes have been registered
+ *         into the Clue Protocol and checks that a leaf, or a list of leaves, is valid:
+ *         registered, and a member of the Sparse Merkle Tree (SMT) with a given root.
  * @dev Three parts that work together.
  *
  *      1. The leaf hash. The leaf of an account is the hash of its position and its
@@ -18,14 +20,19 @@ pragma solidity ^0.8.24;
  *         contract takes it as given. Binding the position into the leaf means the same
  *         account hash at another position is a different leaf. See {_hashLeaf}.
  *
- *      2. The record. One map, `leaf => registered`, append-only and read-only to the
- *         outside:
- *           - A leaf is added with {_registerLeaf}, {_registerLeaves} or
- *             {_registerProvenLeaves}. All are internal, so only the registry can call them.
+ *      2. The record. One map, `leaf => registered`, append-only. Reads are open to
+ *         everyone; writes are restricted to the set of contract authorizers:
+ *           - A leaf is added with {registerLeaf}, {registerLeaves} or {registerAccounts}.
  *           - There is no function that removes or clears a leaf, so a registered leaf stays
  *             registered forever.
- *           - Everything public is a view.
- *         The zero hash can never be registered.
+ *           - Registration is open only to an address marked as an authorizer; every read is
+ *             open. The zero hash can never be registered.
+ *
+ *      The authorizer set is provided by {ClueAuthorizer}: the deployer is the initial owner
+ *      and authorizer, and the owner can call {addAuthorizer} and {revokeAuthorizer}. An
+ *      authorizer cannot transfer the role, and an unrelated account cannot take it over.
+ *      Following {ClueValidators}, the authorizers are contract-level accounts; they are
+ *      not per-code validator authorizers.
  *
  *      3. The compute check. Given the account hash, its position and its siblings, derive
  *         the leaf, hash it up the tree and compare the result with the SMT root. Pure
@@ -65,7 +72,7 @@ pragma solidity ^0.8.24;
  *
  *      NOTE: reference implementation, not audited.
  */
-abstract contract ClueAccounts {
+abstract contract ClueAccounts is ClueAuthorizer {
     // Types
 
     /// @notice Result of checking one leaf. Valid is 1, never 0, so an unset result can
@@ -88,6 +95,14 @@ abstract contract ClueAccounts {
         bytes32[] siblings;    // Siblings from the leaf level up to just below the root
     }
 
+    /// @notice One account to register: its hash and its position in the tree. The leaf is
+    ///         derived from the two, so it is not carried. No siblings: registration trusts
+    ///         the batch, it does not prove membership.
+    struct AccountLeaf {
+        bytes32 accountHash;   // Hash of the account (Account.Hash)
+        uint64 position;       // Position of the account in the SMT (Account.TreePosition)
+    }
+
     // Storage
 
     /// @dev Leaf hash => true once registered. Never set back to false.
@@ -98,23 +113,17 @@ abstract contract ClueAccounts {
     /// @dev The zero hash cannot be registered.
     error ZeroLeaf();
 
+    /// @dev An account with a zero hash cannot be registered.
+    error ZeroAccountHash();
+
     /// @dev A leaf is not registered. Reverted by {_requireRegistered}.
     error LeafNotRegistered(bytes32 leaf);
-
-    /// @dev One leaf of a batch is not registered. `index` is its position in the batch.
-    error LeafNotRegisteredAt(uint256 index, bytes32 leaf);
 
     /// @dev A single leaf failed its check.
     error InvalidLeaf(LeafCheck reason);
 
-    /// @dev One leaf of a batch failed its check. `index` is its position in the batch.
-    error InvalidLeafAt(uint256 index, LeafCheck reason);
-
     /// @dev A batch with no leaves is never valid.
     error EmptyLeafBatch();
-
-    /// @dev Parallel arrays passed to a batch function have different lengths.
-    error LengthMismatch();
 
     // Events
 
@@ -126,14 +135,14 @@ abstract contract ClueAccounts {
 
     /// @notice The leaf hash of an account: keccak256 of `position` then `accountHash`.
     ///         Use it to build the leaf a client expects to find in the record.
-    function computeLeafHash(uint64 position, bytes32 accountHash) public pure returns (bytes32) {
+    function computeLeafHash(uint64 position, bytes32 accountHash) external pure returns (bytes32) {
         return _hashLeaf(position, accountHash);
     }
 
     // Public views: the record
 
     /// @notice Returns true if `leaf` has been registered.
-    function isRegistered(bytes32 leaf) public view returns (bool) {
+    function isRegistered(bytes32 leaf) external view returns (bool) {
         return _registered[leaf];
     }
 
@@ -146,7 +155,7 @@ abstract contract ClueAccounts {
      * @return allRegistered True only if the list is non-empty and every leaf is registered.
      */
     function areRegistered(bytes32[] memory leaves)
-        public
+        external
         view
         returns (bool[] memory results, bool allRegistered)
     {
@@ -164,22 +173,16 @@ abstract contract ClueAccounts {
 
     /// @notice The root that the account's leaf and its siblings hash up to. Does not check
     ///         it against anything. Useful for building test vectors.
-    function computeRoot(LeafProof memory proof) public pure returns (bytes32) {
+    function computeRoot(LeafProof memory proof) external pure returns (bytes32) {
         return _computeRoot(proof);
     }
 
     // Public views: full validation (registered and proven)
 
-    /// @notice Returns true if the leaf is registered and a valid leaf of the tree with root
-    ///         `root`.
-    function isValidLeaf(bytes32 root, LeafProof memory proof) public view returns (bool) {
-        return _checkProof(root, proof) == LeafCheck.Valid;
-    }
-
     /// @notice Checks one leaf and returns the first failing check, or Valid. Full check:
     ///         account hash not zero, leaf registered, proof hashes up to `root`. An unknown
     ///         leaf fails with NotRegistered before any tree hashing.
-    function validateLeaf(bytes32 root, LeafProof memory proof) public view returns (LeafCheck) {
+    function validateLeaf(bytes32 root, LeafProof memory proof) external view returns (LeafCheck) {
         return _checkProof(root, proof);
     }
 
@@ -193,109 +196,48 @@ abstract contract ClueAccounts {
      * @return allValid True only if the list is non-empty and every leaf is Valid.
      */
     function validateLeafProofs(bytes32 root, LeafProof[] memory proofs)
-        public
+        external
         view
         returns (LeafCheck[] memory results, bool allValid)
     {
         return _checkLeaves(root, proofs);
     }
 
-    /**
-     * @notice Checks a batch of (accountHash, position) pairs against the record, and
-     *         returns one result per pair, in order.
-     * @dev Registration-only: no siblings are supplied, so membership in the tree with
-     *      `root` is NOT verified. `root` is used only to fail closed on a zero root (every
-     *      result is RootMismatch). For membership use {validateLeaf} or
-     *      {validateLeafProofs}. Per-item rules are those of {_checkRegistration}.
-     *      Reverts with {LengthMismatch} if the arrays differ in length. An empty list
-     *      returns an empty result and `allValid` false.
-     * @param root SMT root; a zero root fails every item closed. Not otherwise checked.
-     * @param accountHashes Account hashes, parallel to `positions`.
-     * @param positions     Tree positions, parallel to `accountHashes`.
-     * @return results Result of each pair; Valid or its first failing check.
-     * @return allValid True only if the list is non-empty and every pair is Valid.
-     */
-    function validateLeaves(
-        bytes32 root,
-        bytes32[] memory accountHashes,
-        uint256[] memory positions
-    ) public view returns (LeafCheck[] memory results, bool allValid) {
-        uint256 n = accountHashes.length;
-        if (positions.length != n) revert LengthMismatch();
+    // External: checks that revert
 
-        if (root == bytes32(0)) return (_allRootMismatch(n), false);
-
-        results = new LeafCheck[](n);
-        for (uint256 i; i < n; ++i) {
-            results[i] = _checkRegistration(accountHashes[i], positions[i]);
-        }
-        allValid = _allValid(results);
+    /// @notice Reverts with {LeafNotRegistered} unless `leaf` is registered.
+    function requireRegistered(bytes32 leaf) external view {
+        _requireRegistered(leaf);
     }
 
-    /**
-     * @notice Checks a batch of already-computed leaf hashes against the record. `must`
-     *         controls whether registration is required.
-     * @dev Registration-only: leaf hashes are taken as given, so membership in the tree with
-     *      `root` is NOT verified. `root` is used only to fail closed on a zero root (every
-     *      result is RootMismatch). Per-item rules are those of {_checkLeafHash}; when `must`
-     *      is false only the zero leaf hash is rejected. An empty list returns an empty
-     *      result and `allValid` false.
-     * @param root       SMT root; a zero root fails every item closed. Not otherwise checked.
-     * @param leafHashes Leaf hashes to check.
-     * @param must       True to require each leafHash to be registered.
-     * @return results Result of each leaf hash; Valid or its first failing check.
-     * @return allValid True only if the list is non-empty and every leaf hash is Valid.
-     */
-    function validateLeafHash(
-        bytes32 root,
-        bytes32[] memory leafHashes,
-        bool must
-    ) public view returns (LeafCheck[] memory results, bool allValid) {
-        uint256 n = leafHashes.length;
-        if (root == bytes32(0)) return (_allRootMismatch(n), false);
+    // External: registration (Authorizer only)
 
-        results = new LeafCheck[](n);
-        for (uint256 i; i < n; ++i) {
-            results[i] = _checkLeafHash(leafHashes[i], must);
-        }
-        allValid = _allValid(results);
+    /// @notice Registers one leaf. Reverts on the zero hash. A leaf that is already
+    ///         registered is left as it is and emits nothing.
+    function registerLeaf(bytes32 leaf) external onlyAuthorizer {
+        _registerLeaf(leaf);
     }
 
-    // Registry-facing (internal): checks that revert
+    /// @notice Registers a batch of leaves the authorizer already trusts. Reverts on an
+    ///         empty batch or on the zero hash; duplicates are skipped.
+    function registerLeaves(bytes32[] calldata leaves) external onlyAuthorizer {
+        _registerLeaves(leaves);
+    }
+
+    /// @notice Registers a batch of accounts the authorizer already trusts. The leaf of each
+    ///         is derived from its position and account hash. No proof or root is needed.
+    function registerAccounts(AccountLeaf[] calldata accounts) external onlyAuthorizer {
+        _registerAccounts(accounts);
+    }
+
+    // Internal: checks that revert
 
     /// @dev Reverts with {LeafNotRegistered} unless `leaf` is registered.
     function _requireRegistered(bytes32 leaf) internal view {
         if (!_registered[leaf]) revert LeafNotRegistered(leaf);
     }
 
-    /// @dev Reverts on the first unregistered leaf with {LeafNotRegisteredAt}, or with
-    ///      {EmptyLeafBatch} if there are none. No proof is checked.
-    function _requireRegisteredLeaves(bytes32[] memory leaves) internal view {
-        uint256 n = leaves.length;
-        _requireNonEmpty(n);
-        for (uint256 i; i < n; ++i) {
-            if (!_registered[leaves[i]]) revert LeafNotRegisteredAt(i, leaves[i]);
-        }
-    }
-
-    /// @dev Reverts with {InvalidLeaf} unless the leaf is registered and valid against `root`.
-    function _requireValidLeaf(bytes32 root, LeafProof memory proof) internal view {
-        LeafCheck r = _checkProof(root, proof);
-        if (r != LeafCheck.Valid) revert InvalidLeaf(r);
-    }
-
-    /// @dev Reverts on the first invalid leaf with {InvalidLeafAt}, or with
-    ///      {EmptyLeafBatch} if there are none. One bad leaf rejects the whole batch.
-    function _requireValidLeaves(bytes32 root, LeafProof[] memory proofs) internal view {
-        uint256 n = proofs.length;
-        _requireNonEmpty(n);
-        for (uint256 i; i < n; ++i) {
-            LeafCheck r = _checkProof(root, proofs[i]);
-            if (r != LeafCheck.Valid) revert InvalidLeafAt(i, r);
-        }
-    }
-
-    // Registry-facing (internal): registration
+    // Internal: registration
 
     /// @dev Registers one leaf without a proof. Reverts on the zero hash. A leaf that is
     ///      already registered is left as it is and emits nothing. Build the leaf with
@@ -323,27 +265,19 @@ abstract contract ClueAccounts {
     }
 
     /**
-     * @dev Registers a batch of accounts only if each one proves into `root`, the root just
-     *      accepted. The leaf of each is derived from its position and account hash. Nothing
-     *      is registered unless every proof passes: one bad proof reverts the whole batch
-     *      with {InvalidLeafAt}. Costs one hash per sibling per account, so it is much
-     *      heavier than {_registerLeaves}.
-     *
-     *      Proofs are against the FINAL root of the batch, so only a leaf that is in that
-     *      root can be registered here. If a serial changed twice in one Version, only its
-     *      last leaf proves; the intermediate leaf does not and is never registered.
-     *
-     *      Uses {_checkProofOnly}, not {_checkProof}, because the leaves being registered
-     *      are by definition not in the record yet.
-     * @return added Number of leaves that were new.
+     * @dev Registers a batch of accounts without checking tree membership. The leaf of each
+     *      is derived from its position and account hash. The batch is trusted: the registry
+     *      calls this only for a root the validators already accepted, so no root or siblings
+     *      are needed and nothing here proves anything. Reverts on an empty batch or a zero
+     *      account hash; an account whose leaf is already registered is skipped, so a repeat
+     *      never blocks a batch.
      */
-    function _registerProvenLeaves(bytes32 root, LeafProof[] memory proofs) internal returns (uint256 added) {
-        uint256 n = proofs.length;
+    function _registerAccounts(AccountLeaf[] memory accounts) internal {
+        uint256 n = accounts.length;
         _requireNonEmpty(n);
         for (uint256 i; i < n; ++i) {
-            LeafCheck r = _checkProofOnly(root, proofs[i]);
-            if (r != LeafCheck.Valid) revert InvalidLeafAt(i, r);
-            if (_registerLeaf(_hashLeaf(proofs[i].position, proofs[i].accountHash))) ++added;
+            if (accounts[i].accountHash == bytes32(0)) revert ZeroAccountHash();
+            _registerLeaf(_hashLeaf(accounts[i].position, accounts[i].accountHash));
         }
     }
 
@@ -373,7 +307,7 @@ abstract contract ClueAccounts {
 
     /// @dev Proof check only, without the registration check: account hash not zero, depth,
     ///      position, then the compute. A zero `root` never matches, so a missing root fails
-    ///      closed. Also used by {_registerProvenLeaves} for leaves not yet registered.
+    ///      closed. Called by {_checkProof} after its registration check.
     function _checkProofOnly(bytes32 root, LeafProof memory p) internal pure virtual returns (LeafCheck) {
         if (p.accountHash == bytes32(0)) return LeafCheck.EmptyLeaf;
 
@@ -389,34 +323,9 @@ abstract contract ClueAccounts {
         return LeafCheck.Valid;
     }
 
-    /// @dev Registration-only check for one (accountHash, position) pair, used by
-    ///      {validateLeaves}. Cannot verify against a root without siblings. Rules, in order:
-    ///      zero account hash -> EmptyLeaf; position over uint64 -> InvalidPosition; leaf not
-    ///      registered -> NotRegistered; otherwise Valid.
-    function _checkRegistration(bytes32 accountHash, uint256 position) internal view returns (LeafCheck) {
-        if (accountHash == bytes32(0)) return LeafCheck.EmptyLeaf;
-        if (position > type(uint64).max) return LeafCheck.InvalidPosition;
-        return _checkLeafHash(_hashLeaf(uint64(position), accountHash), true);
-    }
-
-    /// @dev Check for one already-computed leaf hash: zero -> EmptyLeaf; `must` and not
-    ///      registered -> NotRegistered; otherwise Valid. With `must` false the record is
-    ///      not read.
-    function _checkLeafHash(bytes32 leaf, bool must) internal view returns (LeafCheck) {
-        if (leaf == bytes32(0)) return LeafCheck.EmptyLeaf;
-        if (must && !_registered[leaf]) return LeafCheck.NotRegistered;
-        return LeafCheck.Valid;
-    }
-
     /// @dev Reverts with {EmptyLeafBatch} if a batch has no items.
     function _requireNonEmpty(uint256 n) private pure {
         if (n == 0) revert EmptyLeafBatch();
-    }
-
-    /// @dev `n` results, all RootMismatch. Used to fail a whole batch closed on a zero root.
-    function _allRootMismatch(uint256 n) private pure returns (LeafCheck[] memory results) {
-        results = new LeafCheck[](n);
-        for (uint256 i; i < n; ++i) results[i] = LeafCheck.RootMismatch;
     }
 
     /// @dev True only if `results` is non-empty and every entry is Valid.

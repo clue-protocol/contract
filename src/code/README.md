@@ -2,7 +2,13 @@
 
 `ClueCode.sol` is the ERC-721 contract that represents ownership of a **Provider Code**, the numeric prefix of every Clue ID (for example `27` in `27-1234567890`).
 
-ClueCode is intentionally small. It stores ownership and derives grade and canonical form from the token id. It stores no capacity, zones, links, partitions, versions or status. Those live in ClueRegistry, which also holds the Code Vault.
+The deployed contract combines three layers:
+
+- **Code** — ERC-721 ownership, grade, canonical form and lockable metadata, implemented in `ClueCode.sol`.
+- **Organisation / vault** — organisations, org roles, Ed25519 signers and code custody, implemented in the inherited `ClueCodeOrganisation.sol`.
+- **Constrict** — a small ERC-165-based trust layer (`../zlibs/constrict/ClueConstrict.sol`) that lets the admin grant a sibling contract the right to set code status.
+
+Capacity, zones, links, partitions and versions are **not** stored here; they live in ClueRegistry.
 
 > Reference implementation, **not audited**.
 
@@ -22,64 +28,85 @@ Total supply is **90,999**. Zero, `1000–9999` and anything above `99999` are i
 
 ## Interface
 
+`IClueCode.sol` declares the NFT surface; `IClueProviderCode.sol` extends it with the organisation/vault surface and is the interface used for ERC-165 and constrict role checks. `IClueConstrict.sol` declares the constrict errors and events once for both sides.
+
 | Function | Access | Purpose |
 | --- | --- | --- |
 | `gradeOf(code)` | public view | Grade, or reverts `InvalidProviderCode(code)` |
 | `isValidCode(code)` | public view | True if the code is in a valid range |
 | `canonical(code)` | public view | Zero-padded string, e.g. `"02"` |
-| `mint(to, code)` | `MINTER_ROLE` | Mint one code |
-| `mintBatch(to, codes)` | `MINTER_ROLE` | Mint several codes atomically |
-| `totalMinted()` | public view | Codes minted so far |
-| `MAX_SUPPLY()` | public view | `90999` (convenience for clients and tests) |
-| `tokenURI(code)` | public view | On-chain base64 JSON with an SVG image |
-| `beginDefaultAdminTransfer`, `acceptDefaultAdminTransfer` | admin / pending admin | Two-step, delayed admin change |
-| `grantRole`, `revokeRole`, `renounceRole` | role admin / holder | OpenZeppelin role management |
+| `isMinted(code)` | public view | True once the token exists |
+| `mint`, `mintBatch`, `mintWithMetadata` | `MINTER_ROLE` | Mint codes, optionally with metadata |
+| `totalMinted()`, `MAX_SUPPLY()` | public view | Supply counters |
+| `setMetadata`, `setMetadataBatch`, `clearMetadata` | `METADATA_ROLE` | Change stored metadata |
+| `setBaseURI` | `METADATA_ROLE` | Change the fallback base URI |
+| `freezeCode`, `freezeMetadata` | `METADATA_ROLE` | Permanently lock metadata |
+| `metadata`, `metadataOf`, `hasMetadata`, `tokenURI` | public view | Read metadata |
+| `registry()` | public view | Address allowed to drive org/vault state |
+| `setRegistry` | admin | Set the trusted registry |
+| `codeOrg`, `codeStatus`, `totalOrganisation` | public view | Vault and code status views |
+| `organisationOf`, `organisationSignersOf`, `organisationSigner`, `hasOrgRole` | public view | Organisation views |
+| `createOrganisationFor`, `addOrganisationSignerFor`, `grantOrgRole`, `revokeOrgRole`, `setOrgRoleAdmin`, `setOrganisationVerificationFlag` | registry | Organisation administration on behalf of a user |
+| `vaultCode`, `releaseVaultCode`, `setCodeStatus` | registry | Code custody and lifecycle |
+| `grantConstrictRole` | admin | Grant a sibling contract a capability by interface id |
+| `setProviderCodeStatus` | constrict role | Set status from a granted sibling contract |
+| `beginDefaultAdminTransfer`, `acceptDefaultAdminTransfer`, `grantRole`, `revokeRole`, `renounceRole` | admin / role admin | OpenZeppelin access control |
 | Standard ERC-721 | public | `ownerOf`, `balanceOf`, `approve`, `setApprovalForAll`, `transferFrom`, `safeTransferFrom` |
 
-The only custom error is `InvalidProviderCode(uint256 code)`. Events are the inherited ERC-721 `Transfer` and `Approval`, plus the AccessControl events.
+Errors and events for the metadata surface are declared in `IClueCode`, for the org/vault surface in `IClueProviderCode`, and for constrict in `IClueConstrict`. `supportsInterface` also reports ERC-4906 (`0x49064906`) and `type(IClueProviderCode).interfaceId`.
 
-## Design decisions
+## Metadata model
 
-- **Fixed, bounded supply.** Only valid codes can be minted and each token exists once, so supply cannot exceed 90,999 without a separate cap check.
-- **Not upgradeable.** Roles are only the admin and the minter. Neither can transfer, burn or pause a token or change its metadata, so the Foundation holds no ultimate authority over code assignment.
-- **Fully on-chain metadata.** `tokenURI` returns a base64 JSON data URI (name, grade, digit count) with an SVG of the canonical code on a grade-coloured background. Nothing is hosted and nothing can be changed. Status, links and capacity are read from ClueRegistry, never from the token.
-- **No `ERC721Enumerable`.** It adds storage cost on every transfer. Indexers list holdings from `Transfer` events.
-- **`_mint`, not `_safeMint`,** so a batch can go to a distributor contract.
-- **No hooks into ClueRegistry.** The NFT stays usable on any marketplace and the registry can be redeployed without touching ownership.
-- **Key separation.** Owning a code gives no signing authority. Profile Server keys are registered in ClueRegistry, so transferring the NFT cannot silently transfer provider keys.
+- Each code may have stored metadata: name, description, image, external URL and extra traits.
+- `tokenURI` prefers the stored JSON when present. A code without stored metadata falls back to `baseURI + canonical(code)` when a base URI is set, otherwise to generated on-chain JSON.
+- Grade and Digits traits are always derived from the token id and cannot be overridden.
+- `freezeCode(code)` locks one code; `freezeMetadata()` locks every code and the base URI. Both are permanent.
+- `setBaseURI` emits `BatchMetadataUpdate(1, MAX_SUPPLY)` so indexers can refresh existing tokens.
 
 ## Access control
 
-ClueCode uses OpenZeppelin's `AccessControlDefaultAdminRules` (OpenZeppelin 5.0.2).
-
-| Role | Holder | Can do |
+| Role / capability | Holder | Can do |
 | --- | --- | --- |
-| `DEFAULT_ADMIN_ROLE` | A multisig | Grant and revoke `MINTER_ROLE`. Changing the admin is two-step and takes effect after the configured delay |
-| `MINTER_ROLE` | Genesis distributor | `mint` and `mintBatch` |
+| `DEFAULT_ADMIN_ROLE` | multisig | Grant/revoke roles, set the registry, grant constrict roles. Two-step delayed admin transfer |
+| `MINTER_ROLE` | genesis distributor | `mint`, `mintBatch`, `mintWithMetadata` |
+| `METADATA_ROLE` | metadata operator | Set/clear metadata, set base URI, freeze metadata |
+| `registry` address | ClueRegistry | Create organisations, manage org roles/signers, vault/release codes and set status |
+| Constrict role for `IClueProviderCode` | granted sibling | `setProviderCodeStatus` |
+
+## Organisation / vault model
+
+- `createOrganisationFor` creates an organisation and gives the initiator the default admin, controller and updater roles.
+- Ed25519 signers are append-only. `organisationSigner` returns the first signer; `organisationSignersOf` returns all of them.
+- `verificationFlag` mirrors the backend `Organisation.VerificationFlag` and is set by an org admin through the registry.
+- Role admins default to the org admin role. An org admin may delegate a role's admin, or permanently lock it with `ClueOrgRoles.NO_ROLE_ADMIN`.
+- `CodeStatus` moves between `Open` (not vaulted), `Stateless`, `Active` and `Archived`. `Open` is set only by the release path.
+- `registry` is the only address allowed to call organisation/vault mutations; it forwards the original caller explicitly for role checks.
 
 ## Genesis and lock-down
 
-1. Deploy with a multisig admin, an admin delay, and the distributor as minter (`scripts/deploy.ts`).
-2. Mint all 99 + 900 + 90,000 codes in batches (`scripts/genesis.ts`).
+1. Deploy with a multisig admin, an admin delay, the distributor as minter and an initial base URI.
+2. Mint all 99 + 900 + 90,000 codes in batches.
 3. Verify `totalMinted() == 90999` and spot-check `ownerOf` and `canonical`.
 4. Distribute codes with ordinary ERC-721 transfers, or hold them for sale.
-5. Renounce both roles:
-   - The minter calls `renounceRole(MINTER_ROLE, minter)`.
-   - The admin calls `beginDefaultAdminTransfer(address(0))`, waits out the delay, then calls `renounceRole(DEFAULT_ADMIN_ROLE, admin)`.
-6. Confirm `hasRole` is false for both and that a further `mint` reverts.
+5. Set the registry with `setRegistry(registryAddress)`.
+6. Renounce roles when done:
+   - minter: `renounceRole(MINTER_ROLE, minter)`;
+   - metadata operator: `renounceRole(METADATA_ROLE, account)`;
+   - admin: `beginDefaultAdminTransfer(address(0))`, wait out the delay, then `renounceRole(DEFAULT_ADMIN_ROLE, admin)`.
+7. Confirm no role holder can mint, change metadata or change the registry.
 
-Renouncing `MINTER_ROLE` alone is not enough, because the admin could grant it again. Note that `acceptDefaultAdminTransfer` cannot be used to hand the admin to the zero address; the delayed `renounceRole` above is the correct path.
+Renouncing `MINTER_ROLE` alone is not enough, because the admin could grant it again. `acceptDefaultAdminTransfer` cannot hand the admin role to the zero address; the delayed `renounceRole` above is the correct path.
 
 ## Interaction with ClueRegistry
 
-ClueRegistry, through its Code Vault, is the only contract that treats ClueCode specially:
+The registry is the only contract that treats a Provider Code specially:
 
-- **Activate:** the owner approves the registry; the registry checks `ownerOf` and pulls the token with `transferFrom`.
-- **Root update:** the registry checks that it owns the code. This is the on-chain test for "held in the Code Vault".
-- **Grade checks:** link and partition rules call `gradeOf`; Route codes must be Grade S or A.
-- **Release:** the registry returns the token with `transferFrom`.
+- **Vault:** the registry checks the owner and transfers the token into this contract. No separate ERC-721 approval is needed because the registry forwards the owning caller.
+- **Status:** the registry drives `Stateless → Active → Archived` and back through `setCodeStatus`; a granted constrict sibling can also set status.
+- **Release:** the registry returns the token with an internal transfer, and only while the code is `Stateless`.
+- **Resolve:** the registry reads `codeStatus` and the organisation signer to build the on-chain anchor; ownership alone gives no signing authority.
 
-The registry must use `transferFrom` (not `safeTransferFrom`) on release so a depositor contract that cannot receive ERC-721 tokens does not lock the code, write state before the external transfer, and not rely on balance counts.
+Internal `_transfer` is used for vaulting and release, so no receiver callback runs during registry-driven custody changes.
 
 ## Test vectors
 
@@ -95,7 +122,7 @@ These are shared with the Go backend and TypeScript clients and must give identi
 | `10000` / `99999` | Valid, Grade B |
 | `0` and `100000` | Rejected |
 
-Tests live in [`../../test/ClueCode.ts`](../../test/ClueCode.ts).
+Hardhat tests are still to be added under `../../test/`.
 
 ## Build outputs
 
@@ -103,9 +130,9 @@ Tests live in [`../../test/ClueCode.ts`](../../test/ClueCode.ts).
 
 ## Open items
 
-- Initial distribution of the 90,999 tokens, including any reserved Grade S codes.
-- Final SVG design and resulting bytecode size.
+- Hardhat tests for grade/canonical, metadata freeze, org roles/signers, vault/release and ERC-165.
+- Registry-side wiring: `setRegistry` must be called after deployment, and the registry must satisfy the constrict interface if it needs to set code status.
+- Final metadata image strategy; deployed bytecode is close to the EIP-170 limit.
 - Maximum batch size on the chosen L2.
 - Royalties (ERC-2981). The default is none.
-- What happens to Clue IDs under a code when the NFT leaves the vault (a ClueRegistry decision).
 - Audit scope and timing.

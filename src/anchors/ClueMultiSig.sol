@@ -100,8 +100,9 @@ abstract contract ClueMultiSig is ClueValidators, EIP712 {
 
     // Registry-facing (internal)
 
-    /// @dev Starts collecting approvals for `version` of `code`. One update at a time.
-    function _openUpdate(uint32 code, uint32 version) internal {
+    /// @dev Adds `version` as the open update for `code`. Reverts if a version is
+    ///      already open, so only one version per code can await validation.
+    function _addUpdatingVersion(uint32 code, uint32 version) internal {
         if (version == 0) revert InvalidUpdateVersion();
         uint32 open = _updatingVersion[code];
         if (open != 0) revert UpdateAlreadyOpen(code, open);
@@ -110,19 +111,34 @@ abstract contract ClueMultiSig is ClueValidators, EIP712 {
         emit UpdateOpened(code, version);
     }
 
+    /// @dev True if `code` currently has a version awaiting validation.
+    function _hasUpdatingVersion(uint32 code) internal view returns (bool) {
+        return _updatingVersion[code] != 0;
+    }
+
+    /// @dev Removes the open update for `code` and returns its version.
+    function _removeUpdatingVersion(uint32 code) internal returns (uint32 version) {
+        version = _updatingVersion[code];
+        if (version == 0) revert NoUpdateOpen(code);
+
+        delete _updatingVersion[code];
+        emit UpdateClosed(code, version);
+    }
+
+    /// @dev Starts collecting approvals for `version` of `code`. One update at a time.
+    function _openUpdate(uint32 code, uint32 version) internal {
+        _addUpdatingVersion(code, version);
+    }
+
     /// @dev Ends the open update (confirmed or discarded) and forgets its signers, so
     ///      the same version can be opened again after a discard.
     function _closeUpdate(uint32 code) internal {
-        uint32 version = _updatingVersion[code];
-        if (version == 0) revert NoUpdateOpen(code);
+        _removeUpdatingVersion(code);
 
         EnumerableSet.UintSet storage signers = _signers[code];
         while (signers.length() != 0) {
             signers.remove(signers.at(0));
         }
-        delete _updatingVersion[code];
-
-        emit UpdateClosed(code, version);
     }
 
     /**
